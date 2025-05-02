@@ -2,6 +2,8 @@
 (***************************** Types ******************************************)
 (******************************************************************************)
 exception Error of string * string * value (* location, message, cause *)
+type var = string
+
 type const =
   | NumConst of int
   | StringConst of string
@@ -17,21 +19,15 @@ type value =
   | VarVal of var
   | FunVal of applicable
   | ListVal of value list
-  
-type answer =
-  | ValAns of value
-  | PairAns (* {_|_} *)
-type env = (var list * value list) list
-type cont = value -> meta_cont -> answer
+
+(* list of hash tables, mapping vars to refernces of vals *)
+type local_env = (var * value) list ref
+type env = local_env list
+type cont = value -> meta_cont -> value
 type meta_cont = (env * cont) list
-(*
-type re_env =
-  | UnitEnv of unit -> value
-  | VarEnv of var -> value
-  | VarValEnv of var -> value -> value
- *)
-type lambdaAbsBody = (value list) -> cont -> meta_cont -> answer
-  type fsubrBody = (exp list) -> env -> cont -> meta_cont -> value
+
+type lambdaAbsBody = (value list) -> cont -> meta_cont -> value
+type fsubrBody = (exp list) -> env -> cont -> meta_cont -> value
 type lambdaAbs = int * lambdaAbsBody
 type subr =
   | ThunkSubr of unit -> value
@@ -40,8 +36,8 @@ type subr =
   | TernarySubr of value -> value -> value -> value
 type fsubr = int * fsubrBody
 
-type delta_reifier = value -> value -> value -> env -> cont -> meta_cont -> answer
-type gamma_reifier = value -> value -> value -> cont -> meta_cont -> answer
+type delta_reifier = value -> value -> value -> env -> cont -> meta_cont -> value
+type gamma_reifier = value -> value -> value -> cont -> meta_cont -> value
 type applicable =
   | Abs of lambdaAbs
   | Subr of subr
@@ -68,7 +64,7 @@ and _exp_down v : exp =
   | ConstVal c -> Const c
   | VarVar var -> Var var
   | ListVal vlst -> ListExp elst
-  | FunVal f -> Const 0 (* undefined *)
+  | FunVal f -> ListExp [] (* undefined in Scheme impl *)
 let _env_down v : env =
   match v with
   | FunVal (ReifiedEnv env) -> env
@@ -133,56 +129,64 @@ let _apply_procedure (p : lambdaAbs) args env cont tau : value =
   else Error ("_apply_procedure", "arity mismatch", ListVal args)
 
 (******************* Applying Environment **********************)
-
-(* unfinished *)
-let _L_lookup_common var env : value list =
+let rec _find_opt (loc_env : (var * value) list) var : value option =
+  match loc_env with
+  | [] -> None
+  | (some_var, some_val) :: loc_env_rst ->
+     if var = some_var then Some some_val
+     else _find_opt loc_env_rst var
+let rec _replace (loc_env : (var * value) list) var value : (var * value) list =
+  match loc_env with
+  | [] -> []
+  | (some_var, some_val) :: loc_env_rst ->
+     if var = some_var then (some_var, value) :: loc_env_rst
+     else (some_var, some_val) :: (_replace loc_env_rst var value)
+let _L_lookup_common var env : (value * local_env) option =
   match env with
-  | [] -> [] (* undefined in scheme implementation *)
-  | (vars,vals) :: env_rst ->
-     let pos = _index var table_common_identifiers in
-     if pos >= 0
-     then ((set-car! (vars,vals) (var :: vars)); (* append var to vars*)
-           (set-cdr! (vars,vals) (* append _access (_nth pos table_common_values) to vals*)
-                  (, vals));
-           vals)
-     else []
-let _L_lookup var env : value list =
+  | [] -> None (* undefined in scheme implementation *)
+  | tbl :: env_rst ->
+     match _find_opt (!table_common) var with
+     | None -> None
+     | Some com_val ->
+        let tbl_val = !tbl in
+        tbl := ((var, com_val) :: tbl_val);
+        Some (com_val, tbl)
+let _L_lookup var env : (value * local_env) option =
   match env with
-  | [] -> [] (* undefined in scheme implementation *)
-  | (vars,vals) :: env_rst ->
-     let position = _index var vars in
-     if position >= 0 then _nth_lst position vals
-     else
-       if env_rst = [] then _L_lookup_common var env
-       else _L_lookup var env_rst
-let _apply_environment_set i v env_f cont tau : value =
+  | [] -> _L_lookup_common var env
+  | tbl :: env_rst ->
+     match _find_opt (!tbl) var with
+     | Some val_found -> Some (val_found, tbl)
+     | None -> _L_lookup var env_rst
+let _apply_environment_set (i : value) (v : value) (env_f : value) cont tau : value =
   match i with
   | VarVal var ->
-     let location = _L_lookup var (_env_down env_f) in
-     if location = []
-     then Error ("_apply_environment", "undefined variable", i)
-     else (_update location v;
-           cont (List.fst location) tau)                     
+     let env = _env_down env_f in
+     (match _L_lookup var env with
+      | None -> Error ("_apply_environment", "undefined variable", i)
+      | Some (val_found, tbl) ->
+         let tbl' = _replace (!tbl) var v in
+         tbl := tbl';
+         cont v tau) (* in scheme impl we would returned val_found because there's mutability *)
   | _ -> Error ("_apply_environment", "not an identifier", i)
-       
-let _R_lookup_common var : value =
-  match _index var table_common_identifiers with
-  | Some pos ->
-     _nth pos table_common_values
-  | None -> ConstVal 0 (* undefined behaviour in scheme implementation *)
-let _R_lookup var env =
+
+let _R_lookup_common var : value option = _find_opt (!table_common) var
+
+let _R_lookup var env : value option =
   match env with
   | [] -> _R_lookup_common var
-  | (vars,vals) :: env_rst ->
-     let position = _index var vars in
-     if position >= 0 then _nth position vals
-     else _R_lookup var env_rst
+  | tbl :: env_rst ->
+     match _find_opt (!tbl) var with
+     | Some val_found -> Some val_found
+     | None -> _R_lookup var env_rst
+let local_env_to_value (loc_env : local_env) : value =
+  let loc_env_content = !loc_env in
+  ListVal (List.map (fun (var,value) -> ListVal [VarVal var, value]) loc_env_content)
 let env_to_value env : value =
-  List.map (fun (vars,vals) -> (List.map VarVal vars), vals) env
+  ListVal (List.map local_env_to_value env)
 let _apply_environment (f : env) args env cont tau : value =
   match args with
-  | [] ->
-     cont (env_to_value f) tau
+  | [] -> cont (env_to_value f) tau
   | arg1 :: [] ->
      let cont' =
        (fun i tau ->
@@ -240,9 +244,9 @@ let _check_cont_spawn (exp_rfl : exp) (env_rfl : env)
      let cont' =
        (fun i tau ->
          match i with
-         | VarVal var -> _terminate-level (_R_lookup var (_env-down _k)) tau
+         | VarVal var -> _terminate-level (_R_lookup var (_env-down cont_rfl)) tau
          | _ -> Error ("environment", "not an identifier", i)) in
-     _eval exp_rfl env_rfl cont' (_meta-push r k tau)
+     _eval exp_rfl env_rfl cont' (_meta-push env cont tau)
   | ReifiedCont cont_re ->
      _eval exp_rfl env_rfl (_cont-down cont_re) (_meta-push env cont tau)
   | Delta d ->
@@ -269,7 +273,7 @@ let _meaning args env cont tau : value =
      let cont'' = (fun a1 a2 tau -> _eval arg3 env (cont' a1 a2) tau) in
      let cont''' = (fun a1 tau -> _eval arg2 env (cont'' a1) tau) in
      _eval arg1 env cont''' tau
-  | _ -> ConstVal (NumConst 0) (* undefined *)
+  | _ -> ListVal [] (* undefined in Scheme impl *)
 (******************* The Main Apply Function **********************)
 let _apply_h (fo : applicable) args env cont tau =
   match fo with
@@ -284,28 +288,20 @@ let _apply (f_val : value) args env cont tau =
   match f_val with
   | FunVal fo -> _apply_h fo args env cont tau
   | _ -> Error ("_apply", "unapplicable form", fo)
-let _lookup_common var cont tau =
-  match _index var table_common_identifiers with
-  | Some pos ->
-     cont (_nth pos table_common_values) tau
+
+let _lookup_common var cont tau : value =
+  match _find_opt (!table_common) var with
+  | Some some_val -> cont some_val tau
   | None -> Error ("_lookup_common", "unbound identifier", VarVal var)
-(* 
-_access (_nth position (cdar env))
-to nth num lst
 
-_index var lst: finds location of var in lst
-
-in scheme implementation, environment has
-at least one argument to start with, but by allowing env to be empty
-we make it more concise
- *)
 let rec _lookup var env cont tau : value =
   match env with
   | [] -> _lookup_common var cont tau
-  | (vars,vals) :: env_rst ->
-     let position = _index var vars in
-     if position >= 0 then cont (_nth position vals) tau
-     else _lookup var env_rst cont tau
+  | env1 :: env_rst ->
+     match _find_opt (!env1) var with
+     | Some val_found -> cont val_found tau
+     | None -> _lookup var env_rst cont tau
+          
 let rec _eval (expr : exp) env cont tau : value= 
   match expr with
   | VarExp var -> _lookup var env cont tau

@@ -36,12 +36,50 @@ let _lambda : fsubrBody =
      let lbd = FunVal (Abs (List.length paras,bd)) in
      cont lbd tau
   | _ -> ListVal [] (* undefined *)
-
-let fsubr_table_h =
-  [(1, _quote),
-   (3, _if),
-   (2, _lambda)
+let _delta : fsubrBody =
+  fun args env cont tau ->
+  match args with
+  | (ListExp [para_exp, para_env, para_cont]) :: body :: [] ->
+     let paras = [para_exp, para_env, para_cont] in
+     let d = (fun val_exp val_env val_cont env' cont' tau ->
+         _eval body (_extend_env paras [val_exp, val_env, val_cont] env') cont' tau) in
+     let dt = FunVal (Delta d) in
+     cont dt tau
+  | _ -> Error ("_delta", "wrong para shape", (List.fst args))
+let _gamma : fsubrBody =
+  fun args env cont stau ->
+  match args with
+  | (ListExp [para_exp, para_env, para_cont]) :: body :: [] ->
+     let paras = [para_exp, para_env, para_cont] in
+     let d = (fun val_exp val_env val_cont cont' tau ->
+         _eval body (_extend_env paras [val_exp, val_env, val_cont]
+                       (_top-env stau)) cont' tau) in
+     let dt = FunVal (Delta d) in
+     cont dt stau
+  | _ -> Error ("_gamma", "wrong para shape", (List.fst args))
+let fsubr_table_0_h =
+  [
   ]
+let fsubr_table_1_h =
+  [_quote,
+  ]
+let fsubr_table_2_h =
+  [_lambda,
+   _delta,
+   _gamma,
+  ]
+let fsubr_table_3_h =
+  [_if
+  ]
+let fsubr_table_0 = List.map (fun x -> 0,x) fsubr_table_0_h
+let fsubr_table_1 = List.map (fun x -> 1,x) fsubr_table_1_h
+let fsubr_table_2 = List.map (fun x -> 2,x) fsubr_table_2_h
+let fsubr_table_3 = List.map (fun x -> 3,x) fsubr_table_3_h
+let fsubr_table_h =
+  List.append fsubr_table_0
+    (List.append fsubr_table_1
+       (List.append fsubr_table_2 fsubr_table_3))
+
 let subr_table_h =
   [
   ]
@@ -63,9 +101,7 @@ let fsubr_table = List.map FSubr fsubr_table_h
         (_inSubr 1 negative?) (_inSubr 1 positive?)
         (_inSubr 1 _applicable?)
 
-                            
-        (_inFsubr 2 _lambda)
-        (_inFsubr 2 _delta) (_inFsubr 3 _meaning) (_inFsubr 2 _gamma)
+                         (_inFsubr 3 _meaning) 
          (_inSubr 3 _ef)
         (_inFsubr 2 _common-define) (_inFsubr 2 _define)
         (_inFsubr 2 _set!)
