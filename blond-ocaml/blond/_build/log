@@ -1,0 +1,28 @@
+# dune build
+# OCAMLPARAM: unset
+# Shared cache: enabled-except-user-rules
+# Shared cache location: /home/charles/.cache/dune/db
+# Workspace root:
+# /home/charles/projects/research/lavender/lavender/blond-ocaml/blond
+# Auto-detected concurrency: 8
+# Dune context:
+#  { name = "default"
+#  ; kind = "default"
+#  ; profile = Dev
+#  ; merlin = true
+#  ; fdo_target_exe = None
+#  ; build_dir = In_build_dir "default"
+#  ; instrument_with = []
+#  }
+$ /home/charles/.opam/fpop/bin/ocamlc.opt -config > /tmp/dune_39f560_output
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamldep.opt -modules -impl lib/init.ml) > _build/default/lib/.blond.objs/blond__Init.impl.d
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -I lib/.blond.objs/byte -no-alias-deps -opaque -open Blond__ -o lib/.blond.objs/byte/blond__Init.cmo -c -impl lib/init.ml)
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -I lib/.blond.objs/byte -no-alias-deps -opaque -open Blond__ -o lib/.blond.objs/byte/blond.cmo -c -impl lib/blond.ml)
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -a -o lib/blond.cma lib/.blond.objs/byte/blond__.cmo lib/.blond.objs/byte/blond__Evaluator.cmo lib/.blond.objs/byte/blond__Parser.cmo lib/.blond.objs/byte/blond__Lexer.cmo lib/.blond.objs/byte/blond__Init.cmo lib/.blond.objs/byte/blond.cmo)
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamlc.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -bin-annot -I bin/.main.eobjs/byte -I lib/.blond.objs/byte -no-alias-deps -opaque -o bin/.main.eobjs/byte/dune__exe__Main.cmi -c -intf bin/main.mli)
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamlopt.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -I lib/.blond.objs/byte -I lib/.blond.objs/native -intf-suffix .ml -no-alias-deps -opaque -open Blond__ -o lib/.blond.objs/native/blond.cmx -c -impl lib/blond.ml)
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamlopt.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -I bin/.main.eobjs/byte -I bin/.main.eobjs/native -I lib/.blond.objs/byte -I lib/.blond.objs/native -intf-suffix .ml -no-alias-deps -opaque -o bin/.main.eobjs/native/dune__exe__Main.cmx -c -impl bin/main.ml)
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamlopt.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -I lib/.blond.objs/byte -I lib/.blond.objs/native -intf-suffix .ml -no-alias-deps -opaque -open Blond__ -o lib/.blond.objs/native/blond__Init.cmx -c -impl lib/init.ml)
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamlopt.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -a -o lib/blond.cmxa lib/.blond.objs/native/blond__.cmx lib/.blond.objs/native/blond__Evaluator.cmx lib/.blond.objs/native/blond__Parser.cmx lib/.blond.objs/native/blond__Lexer.cmx lib/.blond.objs/native/blond__Init.cmx lib/.blond.objs/native/blond.cmx)
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamlopt.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -shared -linkall -I lib -o lib/blond.cmxs lib/blond.cmxa)
+$ (cd _build/default && /home/charles/.opam/fpop/bin/ocamlopt.opt -w @1..3@5..28@31..39@43@46..47@49..57@61..62@67@69-40 -strict-sequence -strict-formats -short-paths -keep-locs -g -o bin/main.exe lib/blond.cmxa bin/.main.eobjs/native/dune__exe__Main.cmx)

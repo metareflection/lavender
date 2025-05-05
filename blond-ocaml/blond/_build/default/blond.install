@@ -1,0 +1,11 @@
+lib: [
+  "_build/install/default/lib/blond/META"
+  "_build/install/default/lib/blond/dune-package"
+  "_build/install/default/lib/blond/opam"
+]
+bin: [
+  "_build/install/default/bin/blond"
+]
+doc: [
+  "_build/install/default/doc/blond/README.md"
+]

@@ -1,16 +1,9 @@
 open Blond
-(*
-type applicable =
-  | Abs of lambdaAbs
-  | Subr of subr
-  | FSubr of fsubr
-  | ReifiedEnv of env
-  | ReifiedCont of cont
-  | Delta of delta_reifier
-  | Gamma of gamma_reifier
- *)
 
 (********************* some helpers ***********************************)
+let _extend_env paras vals env =
+  (zip_lst paras vals) :: env
+
 let make_init_env =
   fun () -> _extend_env [] [] []
 let zip_lst lst1 lst2 =
@@ -18,11 +11,12 @@ let zip_lst lst1 lst2 =
   | [], [] -> []
   | name1 :: lst1_rst, val1 :: lst2_rst ->
      (name1,val1) :: zip_lst lst1_rst lst2_rst
-let _extend_env paras vals env =
-  (zip_lst paras vals) :: env
+
 let blond_banner =
   ConstVal (StringConst "starting-up")
-(**************** Build in Functions of Blond in Common Environment **************)
+(***************************************************************************************)
+(***************** Built in Special Forms of Blond in Common Environment ***************)
+(***************************************************************************************)
 let _quote : fsubrBody =
   fun args env cont tau ->
   cont (List.fst args) tau
@@ -225,6 +219,7 @@ let _read : fsubrBody =
          cont (_read_file file_name) tau) in
      _eval file env cont' tau
   | _ -> Error ("_read", "arity mismatch", ListVal (_exp_to_val args))
+
 let _gen_metalevel new_level new_lv_env env cont tau =
   let new_level_cont = _gen_toplv_cont new_level new_lv_env in
   new_level_cont blond_banner (_meta_push env cont tau)
@@ -265,6 +260,7 @@ let _extend_reified_env : fsubrBody =
      let cont' = (fun a1 tau ->
          _eval val_lst env (cont'' a1) tau) in
      _eval var_lst env tau
+
 let _let_idlis bindings =
   match bindings with
   | [] -> []
@@ -290,6 +286,7 @@ let _let : fsubrBody =
      let cont' = (fun vals tau ->
          _eval body (_extend_env (_let_idlis bindings) vals env) cont tau) in
      _let_evlis bindings env cont' tau
+
 let rec one_env_update_vals env vals =
   match env, vals with
   | (var,value) :: env_rst, new_val :: vals_rst ->
@@ -311,6 +308,7 @@ let _letrec : fsubrBody =
          env_update_vals env vals;
          _eval body env cont tau) in
      _let_evlis bindings env cont' tau
+
 let _rec : fsubrBody =
   fun args env cont tau ->
   match args with
@@ -320,6 +318,7 @@ let _rec : fsubrBody =
          env_update_vals env (ListVal [a]);
          cont a tau) in
      _eval body env cont' tau
+
 let rec _let_star_evlis bindings body env cont tau =
   match bindings with
   | [] -> _eval body env cont tau
@@ -334,16 +333,7 @@ let _let_star : fsubrBody =
   match args with
   | bindings :: body :: [] ->
      _let_star_evlis bindings body env cont tau
-let rec _case_loop val_pred args env cont tau =
-  match args with
-  | [] -> Error ("_case_loop", "unmatched", a)
-  | ListExp (case1_form :: [case1_body]) :: cases_rst ->
-     if case1_form = ConstExp (StringConst "else")
-     then _eval case1_body env cont tau
-     else
-       if val_member_or_eq_exp a cases1_form in
-       then _eval case1_body env cont tau
-       else _case_loop val_pred cases_rst env cont tau
+
 let _cond : fsubrBody =
   fun args env cont tau ->
   match args with
@@ -361,6 +351,7 @@ let _cond : fsubrBody =
                _cond conds_rst env cont tau
             | _ -> _eval body1 env cont tau) in
         _eval cond1 env cont' tau
+
 let _reify_new_cont : fsubrBody =
   fun args env cont tau ->
   match args with
@@ -401,9 +392,14 @@ let _switch_cont_mode : subr =
      else
        (jumpy_cont := true;
         ConstVal (StringConst "set to jumpy")))
+
 let _blond_exit : fsubrBody =
   fun args env cont tau ->
   ConstVal (StringConst "farvel!")
+
+(***************************************************************************************)
+(*********************** Table for Built in Special Forms of Blond *********************)
+(***************************************************************************************)
 
 let fsubr_table_0_h =
   [_case,
@@ -413,10 +409,11 @@ let fsubr_table_0_h =
    _read,
    _openloop,
    _cond,
-   _blond_exit
+   _blond_exit,
+   _reify_new_cont
   ]
 let fsubr_table_1_h =
-  [_quote,
+  [_quote
   ]
 let fsubr_table_2_h =
   [_lambda,
@@ -428,7 +425,7 @@ let fsubr_table_2_h =
    _let,
    _letrec,
    _rec,
-   _let_star,
+   _let_star
   ]
 let fsubr_table_3_h =
   [_if,
@@ -442,52 +439,245 @@ let fsubr_table_h =
   List.append fsubr_table_0
     (List.append fsubr_table_1
        (List.append fsubr_table_2 fsubr_table_3))
-
-let subr_table_3_h =
-  [_ef
-  ]
-let subr_table = List.map Subr subr_table_h
 let fsubr_table = List.map FSubr fsubr_table_h
-(*********)    
-    (_inSubr 1 car) (_inSubr 1 cdr)
-        (_inSubr 1 caar) (_inSubr 1 cadr)
-        (_inSubr 1 cdar) (_inSubr 1 cddr)
-        (_inSubr 1 caddr) (_inSubr 1 cdddr)
-        (_inSubr 1 last-pair)
-        (_inSubr 1 null?) (_inSubr 1 atom?) (_inSubr 1 pair?)
-        (_inSubr 1 number?) (_inSubr 1 string?) (_inSubr 1 symbol?)
-        (_inSubr 1 zero?) (_inSubr 1 add1) (_inSubr 1 sub1)
-        (_inSubr 2 +) (_inSubr 2 -) (_inSubr 2 *)
-        (_inSubr 2 <) (_inSubr 2 <=) (_inSubr 2 >) (_inSubr 2 >=)
-        (_inSubr 2 cons) (_inSubr 2 equal?)
-        (_inSubr 2 =) (_inSubr 1 boolean?)
-        (_inSubr 1 negative?) (_inSubr 1 positive?)
-        (_inSubr 1 _applicable?)
 
-                         (_inFsubr 3 _meaning) 
-         (_inSubr 3 _ef)
-        
-        (_inFsubr 0 _case)
-        (_inFsubr 0 _and) (_inFsubr 0 _or)
-        (_inFsubr 0 _evlis)
-        (_inSubr 2 set-car!) (_inSubr 2 set-cdr!)
-        (_inFsubr 0 _begin)
-        (_inSubr 1 display) (_inSubr 1 pretty-print)
-        (_inSubr 1 pretty-print) (_inSubr 0 newline)
-        (_inSubr 1 not) (_inSubr 1 length)
-        (_inFsubr 1 _load) (_inFsubr 1 _mute-load) (_inFsubr 0 _read)
-        (_inSubr 1 open-input-file) (_inSubr 1 eof-object?)
-        (_inSubr 1 close-input-port)
-        (_inSubr 0 flush-output-port)
-        (_inFsubr 2 _let) (_inFsubr 2 _letrec)
-        (_inFsubr 2 _rec) (_inFsubr 2 _let*)
-        (_inFsubr 0 _cond)
-        (_inFsubr 0 _blond-exit)
-        (_inSubr 0 _reify-new-environment)
-        (_inFsubr 0 _reify-new-continuation)
-        (_inSubr 0 _continuation-mode)
-        (_inSubr 0 _switch-continuation-mode)
+(***************************************************************************************)
+(*************** Scheme Built in Functions that I need to define for Ocaml *************)
+(***************************************************************************************)
 
-(******************************************************************************)
-(***************************** Types ******************************************)
-(******************************************************************************)
+(*************** Predicates & Boolean Operations *************)
+let _is_zero : subr =
+ UnarySubr
+   (fun v ->
+     match v with
+     | ConstVal (NumConst 0) -> ConstVal (BoolConst true)
+     | _ -> ConstVal (BoolConst false))
+let _is_positive : subr =
+ UnarySubr
+   (fun v ->
+     match v with
+     | ConstVal (NumConst n) ->
+        if n > 0 then ConstVal (BoolConst true)
+        else ConstVal (BoolConst false)
+     | _ -> ConstVal (BoolConst false))
+let _is_negative : subr =
+ UnarySubr
+   (fun v ->
+     match v with
+     | ConstVal (NumConst n) ->
+        if n < 0 then ConstVal (BoolConst true)
+        else ConstVal (BoolConst false)
+     | _ -> ConstVal (BoolConst false))
+let _is_number : subr =
+ UnarySubr
+   (fun v ->
+     match v with
+     | ConstVal (NumConst _) -> ConstVal (BoolConst true)
+     | _ -> ConstVal (BoolConst false))
+
+let _is_string : subr =
+ UnarySubr
+   (fun v ->
+     match v with
+     | ConstVal (StringConst _) -> ConstVal (BoolConst true)
+     | _ -> ConstVal (BoolConst false))
+let _is_boolean : subr =
+ UnarySubr
+   (fun v ->
+     match v with
+     | ConstVal (BoolConst _) -> ConstVal (BoolConst true)
+     | _ -> ConstVal (BoolConst false))
+
+let _is_pair : subr =
+ UnarySubr
+   (fun v ->
+     match v with
+     | ListVal _ -> ConstVal (BoolConst true)
+     | _ -> ConstVal (BoolConst false))
+let _is_null : subr =
+ UnarySubr
+   (fun lst ->
+     match lst with
+     | ListVal [] -> ConstVal (BoolConst true)
+     | _ -> ConstVal (BoolConst false))
+let _is_applicable : subr =
+ UnarySubr
+   (fun v ->
+     match v with
+     | FunVal _ -> ConstVal (BoolConst true)
+     | _ -> ConstVal (BoolConst false))
+let _not : subr =
+ UnarySubr
+   (fun b ->
+     match b with
+     | ConstVal (BoolConst false) -> ConstVal (BoolConst true)
+     | ConstVal (BoolConst true) -> ConstVal (BoolConst false))
+(*************** List Operations *************)
+let _cons : subr =
+ BinarySubr
+   (fun v lst ->
+     _cons_lst_val v lst)
+let _length : subr =
+ UnarySubr
+   (fun lst ->
+     match lst with
+     | ListVal vlst ->
+        ConstVal (NumConst (List.length vlst)))
+let _car : subr =
+ UnarySubr
+   (fun lst ->
+     match lst with
+     | ListVal (hd :: _) -> hd)
+let _cdr : subr =
+ UnarySubr
+   (fun lst ->
+     match lst with
+     | ListVal (_ :: tl) -> tl)
+let _cadr : subr =
+ UnarySubr
+   (fun lst ->
+     match lst with
+     | ListVal (_ :: v :: _) -> v)
+let _caddr : subr =
+ UnarySubr
+   (fun lst ->
+     match lst with
+     | ListVal (_ :: _ :: v :: _) -> v)
+(*************** Number Operations *************)
+let _add : subr =
+ BinarySubr
+   (fun n1 n2 ->
+     match n1, n2 with
+     | ConstVal (NumConst n1'), ConstVal (NumConst n2') ->
+        ConstVal (NumConst (n1' + n2')))
+let _sub : subr =
+ BinarySubr
+   (fun n1 n2 ->
+     match n1, n2 with
+     | ConstVal (NumConst n1'), ConstVal (NumConst n2') ->
+        ConstVal (NumConst (n1' - n2')))
+let _mult : subr =
+ BinarySubr
+   (fun n1 n2 ->
+     match n1, n2 with
+     | ConstVal (NumConst n1'), ConstVal (NumConst n2') ->
+        ConstVal (NumConst (n1' * n2')))
+let _lt : subr =
+ BinarySubr
+   (fun n1 n2 ->
+     match n1, n2 with
+     | ConstVal (NumConst n1'), ConstVal (NumConst n2') ->
+        if n1' < n2' then ConstVal (BoolConst true)
+        else ConstVal (BoolConst false))
+let _gt : subr =
+ BinarySubr
+   (fun n1 n2 ->
+     match n1, n2 with
+     | ConstVal (NumConst n1'), ConstVal (NumConst n2') ->
+        if n1' > n2' then ConstVal (BoolConst true)
+        else ConstVal (BoolConst false))
+let _equal : subr =
+ BinarySubr
+   (fun v1 v2 ->
+     if v1 = v2 then ConstVal (BoolConst true)
+     else ConstVal (BoolConst false))
+
+(***************************************************************************************)
+(************************* Table for Built in Functions of Blond ***********************)
+(***************************************************************************************)
+
+
+let subr_table_h : subr list =
+  [_car,
+   _cdr,
+   _cadr,
+   _caddr,
+
+   _cons,
+   _length,
+
+   _is_null,
+   _is_pair,
+
+   _is_string,
+   _is_boolean,
+   _is_applicable,
+   
+   _is_zero,
+   _is_negative,
+   _is_positive, 
+   _is_number,
+
+   _add,
+   _sub,
+   _mult,
+   _lt,
+   _gt,
+   _equal,
+   
+   _not,
+   _ef,
+   _reify_new_env,
+   _cont_mode,
+   _switch_cont_mode]
+let subr_table = List.map Subr subr_table_h
+
+(***************************************************************************************)
+(************************* Complete Common Environment of Blond ************************)
+(***************************************************************************************)
+let table_common_subr_ids =
+  ["car", "cdr",
+   "cadr", "caddr",
+   "cons", "length",
+
+   "null?", "pair?",
+   "string?","boolean?",
+   "procedure?",
+   "zero?","negative?", "positive?","number?",
+      
+   "+", "-", "*",
+   "<", ">",
+   "equal?",
+   
+   "not", "ef",
+
+   "reify-new-environment",
+   "continuation-mode",
+   "switch-continuation-mode"
+  ]
+let table_common_fsubr_ids =
+  [
+    (* nullary *)
+    "case",
+    "and", "or",
+    "begin",
+    "read",
+    "openloop",
+    "cond",
+    "blond-exit",
+    "reify-new-continuation",
+    
+    (* unary *)
+    "quote",
+    (* binary *)
+    "lambda",
+    "delta", "gamma", "meaning",
+    "common-define", "define",
+    "set!",
+    
+    "let", "letrec",
+    "rec", "let*",
+    
+    (* ternary *)
+    "if",
+    "extend-reified-environment"
+  ]
+    
+let table_common_ids =
+  List.append table_common_subr_ids table_common_fsubr_ids
+let table_common_values =
+  List.map FunVal (List.append subr_table fsubr_table)
+
+let table_common_initial =
+  zip_lst table_common_ids table_common_values
+
