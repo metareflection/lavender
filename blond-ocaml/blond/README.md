@@ -2,6 +2,6 @@
 
 This is Blond written in OCaml.
 
-The file ./lib/blond.ml contains the main interpreter, whlie ./lib/init.ml contains
+The file ./lib/evaluator.ml contains the main interpreter, whlie ./lib/init.ml contains
 the built in functions and special forms of Blond implemented in OCaml. 
-The frontend for IO is in ./lib/frontend.ml.
+The file ./lib/blond.ml puts everything together

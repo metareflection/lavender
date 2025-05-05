@@ -1,4 +1,0 @@
-(lang dune 3.18)
-(name blond)
-(sections (lib .) (bin ../../bin) (doc ../../doc/blond))
-(files (lib (META dune-package opam)) (bin (blond)) (doc (README.md)))
