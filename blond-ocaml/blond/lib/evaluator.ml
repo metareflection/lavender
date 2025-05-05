@@ -107,7 +107,8 @@ let rec _find_opt (loc_env : (var * value) list) var : value option =
   match loc_env with
   | [] -> None
   | (some_var, some_val) :: loc_env_rst ->
-     if var = some_var then Some some_val
+     if var = some_var
+     then Some some_val
      else _find_opt loc_env_rst var
 let rec _replace (loc_env : (var * value) list) var value : (var * value) list =
   match loc_env with
@@ -131,11 +132,20 @@ let _meta_push env cont tau =
 let _terminate_level (v : value) tau : value =
   (_top_cont tau) v (_meta_pop tau)
 
+
+(* Errors *)
+let error location message value =
+  Error (location, message, value)
+let err (cont : cont) tau location message value =
+  cont (error location message value) tau
 (* Undefined Behaviour *)
-let undef location =
-  Error (location, "Undefined in Scheme Implementation", ListVal [])
-let undef_impossible location =
-  Error (location, "Impossible to Reach This Place", ListVal [])
+let undef_err location = error location "Undefined in Scheme Implementation" (ListVal [])
+let undef cont tau location =
+  err cont tau location "Undefined in Scheme Implementation" (ListVal [])
+let undef_impossible cont tau location =
+  err cont tau location "Impossible to Reach This Place" (ListVal [])
+
+
 (*************************** Mutable Values ***************************)
 let table_common = ref []
 let jumpy_cont = ref true
@@ -143,21 +153,24 @@ let jumpy_cont = ref true
 (************************* The Main Apply Function ****************************)
 (******************************************************************************)
 let _lookup_common var cont tau : value =
-  ifOption (_find_opt (!table_common) var)
-    (fun some_val -> cont some_val tau)
-    (Error ("_lookup_common", "unbound identifier", VarVal var))
-
+  let tbl_result = _find_opt (!table_common) var in
+  (match tbl_result with
+   | Some some_val ->
+      cont some_val tau
+   | None ->
+      err cont tau "_lookup_common" "unbound identifier" (VarVal var))
 let rec _lookup var env cont tau : value =
   match env with
   | [] -> _lookup_common var cont tau
   | env1 :: env_rst ->
-     ifOption (_find_opt (!env1) var)
-       (fun val_found -> cont val_found tau)
-       (_lookup var env_rst cont tau)
-          
+     match _find_opt (!env1) var with
+     | Some val_found -> cont val_found tau
+     | None -> _lookup var env_rst cont tau
+
 let rec _eval (expr : exp) env cont tau : value= 
   match expr with
-  | VarExp var -> _lookup var env cont tau
+  | VarExp var ->
+     _lookup var env cont tau
   | ConstExp c -> cont (ConstVal c) tau
   | ListExp [] -> cont (ListVal []) tau
   | ListExp (fun_exp :: args) ->
@@ -167,7 +180,7 @@ let rec _eval (expr : exp) env cont tau : value=
 and _apply (f_val : value) args env cont tau =
   match f_val with
   | FunVal fo -> _apply_h fo args env cont tau
-  | _ -> Error ("_apply", "unapplicable form", f_val)    
+  | _ -> err cont tau "_apply" "unapplicable form" f_val 
 and _apply_h (fo : applicable) args env cont tau =
   match fo with
   | Abs func -> _apply_procedure func args env cont tau
@@ -205,14 +218,16 @@ and _apply_subr (fo : subr) args env cont tau : value =
      let cont' = (fun a1 tau ->
          _eval arg2 env (cont'' a1) tau) in
      _eval arg1 env cont' tau
-  | _,_ -> Error ("_apply_subr", "arity mismatch", ListVal (_exp_up_star args))
+  | _,_ ->
+     err cont tau "_apply_subr" "arity mismatch" (ListVal (_exp_up_star args))
 
 (* this is technically not mutually recursive *)
 and _apply_fsubr (fv : fsubr) args env cont tau : value =
   let (arity,fv) = fv in
   if arity = (List.length args) || arity = 0
   then fv args env cont tau
-  else Error ("_apply_fsubr", "arity mismatch", ListVal (_exp_up_star args))
+  else
+    err cont tau "_apply_fsubr" "arity mismatch" (ListVal (_exp_up_star args))
 
 (******************* Procedures/Lambda Abstractions **********************)
 
@@ -234,7 +249,8 @@ and _apply_procedure (p : lambdaAbs) args env cont tau : value =
            | ListVal lv -> p_body lv cont tau
            | _ -> ListVal [] (* impossible case *)) in
        _evlis args env cont' tau
-     else Error ("_apply_procedure", "arity mismatch", ListVal (_exp_up_star args))
+     else
+       err cont tau "_apply_procedure" "arity mismatch" (ListVal (_exp_up_star args))
 
 (******************* Applying Environment **********************)
 (* this section, except for _apply_environment, is technically not mutually recursive *)
@@ -242,11 +258,12 @@ and _L_lookup_common var env : (value * local_env) option =
   match env with
   | [] -> None (* undefined in scheme implementation *)
   | tbl :: _ ->
-     ifSome (_find_opt (!table_common) var)
-       (fun com_val ->
-         let tbl_val = !tbl in
-         tbl := ((var, com_val) :: tbl_val);
-         Some (com_val, tbl))
+     match _find_opt (!table_common) var with
+     | Some com_val ->
+        let tbl_val = !tbl in
+        tbl := ((var, com_val) :: tbl_val);
+        Some (com_val, tbl)
+     | None -> None
 and _L_lookup var env : (value * local_env) option =
   match env with
   | [] -> _L_lookup_common var env
@@ -255,16 +272,17 @@ and _L_lookup var env : (value * local_env) option =
      | Some val_found -> Some (val_found, tbl)
      | None -> _L_lookup var env_rst
 
-and _apply_environment_set (i : value) (v : value) (env : env) cont tau : value =
+and _apply_environment_set (i : value) (v : value) (env : env) (cont : cont) tau : value =
   match i with
   | VarVal var ->
-     ifOption (_L_lookup var env)
-       (fun (old_val, tbl) ->
+     (match _L_lookup var env with
+      | Some (old_val, tbl) ->
          let tbl' = _replace (!tbl) var v in
          tbl := tbl';
-         cont old_val tau)
-       (Error ("_apply_environment", "undefined variable", i))
-  | _ -> Error ("_apply_environment", "not an identifier", i)
+         cont old_val tau
+      | None -> (err cont tau "_apply_environment" "undefined variable" i))
+  | _ ->
+     err cont tau "_apply_environment" "not an identifier" i
 
 and _R_lookup_common var : value option = _find_opt (!table_common) var
 
@@ -278,10 +296,10 @@ and _R_lookup var env : value option =
 and _R_lookup_then_cont (i : value) (env : env) cont tau place : value =
   match i with
   | VarVal var ->
-     ifOption (_R_lookup var env)
-       (fun val_fetched -> cont val_fetched tau)
-       (Error (place, "undefined variable", i))
-  | _ -> Error (place, "not an identifier", i)
+     (match _R_lookup var env with
+      | Some val_fetched -> cont val_fetched tau
+      | None -> err cont tau place "undefined variable" i)
+  | _ -> err cont tau place "not an identifier" i
 and local_env_to_value (loc_env : local_env) : value =
   let loc_env_content = !loc_env in
   ListVal (List.map (fun (var,value) -> ListVal ((VarVal var) :: [value])) loc_env_content)
@@ -300,18 +318,19 @@ and _apply_environment (f : env) args env cont tau : value =
      let cont' = (fun var tau ->
          _eval arg2 env (cont'' var) tau) in
      _eval arg1 env cont' tau
-  | _ -> Error ("_apply_environment", "arity mismatch", ListVal (_exp_up_star args))
+  | _ ->
+     err cont tau "_apply_environment" "arity mismatch" (ListVal (_exp_up_star args))
 (******************* Applying Continuations **********************)
-and _apply_continuation_jumpy cont_r args env (_ : cont) tau : value =
+and _apply_continuation_jumpy cont_r args env (cont : cont) tau : value =
   match args with
   | arg1 :: [] ->
      _eval arg1 env cont_r tau
-  | _ -> Error ("_apply_continuation_jumpy", "arity mismatch", ListVal (_exp_up_star args))
+  | _ -> err cont tau "_apply_continuation_jumpy" "arity mismatch" (ListVal (_exp_up_star args))
 and _apply_continuation_pushy cont_r args env cont tau : value =
   match args with
   | arg1 :: [] ->
      _eval arg1 env cont_r (_meta_push env cont tau)
-  | _ -> Error ("_apply_continuation_pushy", "arity mismatch", ListVal (_exp_up_star args))
+  | _ -> err cont tau "_apply_continuation_pushy" "arity mismatch" (ListVal (_exp_up_star args))
 and _apply_continuation cont_r args env cont tau : value =
   if !jumpy_cont then _apply_continuation_jumpy cont_r args env cont tau
   else _apply_continuation_pushy cont_r args env cont tau
@@ -354,16 +373,16 @@ and _check_cont_spawn (exp_rfl : exp) (env_rfl : env)
   | Gamma g ->
      g (_exp_up exp_rfl) (_env_up env_rfl)
        (_cont_up _terminate_level) cont tau
-  | Abs _ -> Error ("_meaning", "pitfall lambda abs/proc", FunVal cont_rfl) 
-  | Subr _ -> Error ("_meaning", "pitfall subr", FunVal cont_rfl) 
-  | FSubr _ -> Error ("_meaning", "pitfall fsubr", FunVal cont_rfl) 
+  | Abs _ -> err cont tau "_meaning" "pitfall lambda abs/proc" (FunVal cont_rfl) 
+  | Subr _ -> err cont tau "_meaning" "pitfall subr" (FunVal cont_rfl) 
+  | FSubr _ -> err cont tau "_meaning" "pitfall fsubr" (FunVal cont_rfl) 
 (* a1 has to be expressible to type check*)
 and _check_and_spawn (a1 : value) (a2 : value) (a3 : value) env cont tau : value =
   match a2, a3 with
   | FunVal (ReifiedEnv a2_env), FunVal a3_f ->
      _check_cont_spawn (_exp_down a1) a2_env a3_f env cont tau
-  | _ -> Error ("_meaning", "polluted environment or pitfall due to not fun",
-                ListVal (a2 :: [a3]))
+  | _ -> err cont tau "_meaning" "polluted environment or pitfall due to not fun"
+           (ListVal (a2 :: [a3]))
        
 and _meaning args env cont tau : value =
   match args with
@@ -373,5 +392,5 @@ and _meaning args env cont tau : value =
      let cont'' = (fun a1 a2 tau -> _eval arg3 env (cont''' a1 a2) tau) in
      let cont' = (fun a1 tau -> _eval arg2 env (cont'' a1) tau) in
      _eval arg1 env cont' tau
-  | _ -> undef "_meaning"
+  | _ -> undef cont tau "_meaning"
 

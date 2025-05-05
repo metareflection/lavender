@@ -10,24 +10,26 @@
 %token LPAREN
 %token RPAREN
 %token EOF
+%token <string> UNDEF
 
 %start <Evaluator.exp> prog
 %%
 
 prog:
-  | e = expr; EOF { e }
+  | e = sexp; EOF { e }
 ;
 
-expr:
+sexp:
   | i = INT { ConstExp (NumConst i) }
-  | x = ID { VarExp x }
-  | s = STRINGLIT { ConstExp (StringConst s) }
   | TRUE { ConstExp (BoolConst true) }
   | FALSE { ConstExp (BoolConst false) }
+  | s = STRINGLIT { ConstExp (StringConst s) }
+  | x = ID { VarExp x }
+  | u = UNDEF { ConstExp (StringConst ("Invalid Character" ^ u)) }
   | LPAREN; RPAREN { ListExp [] } 
-  | LPAREN; elst=expr_lst; RPAREN { ListExp elst } 
+  | LPAREN; elst = exp_lst; RPAREN { ListExp elst } 
 ;
 
-expr_lst:
-  | e = expr { e :: [] }
-  | e = expr; elst = expr_lst { e :: elst }
+exp_lst:
+  | e = sexp { e :: [] }
+  | e = sexp; elst = exp_lst { e :: elst }
