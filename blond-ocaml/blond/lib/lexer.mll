@@ -6,9 +6,8 @@ let white = [' ' '\t']+
 let digit = ['0'-'9']
 let int = '-'? digit+
 let id = ['a'-'z' 'A'-'Z' '0'-'9' '_' '-' '?']+
-let readable =
+let strlit =
     ['a'-'z' 'A'-'Z' '0'-'9' '_' '-' '.' '!' ',' '?' '/' ':']+
-let strlit = '"' readable '"'
 
 rule read = 
   parse
@@ -22,6 +21,7 @@ rule read =
   | "*" { ID "*" }
   | "<" { ID "<" }
   | ">" { ID ">" }
+  | '"' { DOUBLEQUOTE }
   | int { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | id { ID (Lexing.lexeme lexbuf) }
   | strlit { STRINGLIT (Lexing.lexeme lexbuf) }

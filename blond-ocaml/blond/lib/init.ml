@@ -1,5 +1,4 @@
 open Evaluator
-open Core.Std
 (********************* some helpers ***********************************)
 let val_to_var v =
   match v with
@@ -30,16 +29,11 @@ let parse (s : string) : exp =
     ast
   with
   | Parser.Error ->
-    ConstExp (StringConst (s ^ " Does not Parse"))
-
-let read_inp_exp : unit -> exp =
-  fun () ->
-  let ln = read_line () in
-  parse ln
+    ConstExp (StringConst ("The String: \n" ^ s ^ "\n Cannot Be Parsed"))
 
 
 let blond_banner =
-  ConstVal (StringConst "starting-up")
+  ConstVal (StringConst "---Blond Launching---")
 (***************************************************************************************)
 (***************** Built in Special Forms of Blond in Common Environment ***************)
 (***************************************************************************************)
@@ -236,38 +230,60 @@ let rec _begin : fsubrBody =
      _eval stmt1 env cont' tau
   | _ -> undef cont tau "_begin"
 
-let rec read_file_as_str_h channel (content : string) =
-  try
-    let line = input_line channel in
-    read_file_as_str_h channel (line ^ content)
-  with End_of_file ->
-        close_in channel;
-        content
-let read_file_as_str channel = read_file_as_str_h channel ""
-
-let _read_file (file_name : value) =
+let _read_ln_from_file (file_name : value) =
   match file_name with
   | ConstVal (StringConst name) ->
-     (try 
-        (*let in_channel = open_in name in
-        read_file_as_str in_channel*)
-        String.concat "\n" (In_channel.with_open_text name In_channel.input_lines)       
-      with Sys_error _ -> "File Not Found")
+     (try
+        let ln_lst = In_channel.with_open_text name In_channel.input_lines in
+        List.hd ln_lst
+      with
+      | Sys_error _ -> "File Not Found"
+      | Failure _ -> "")
   | _ -> "File Names Must Be Strings!"
 
 let _read : fsubrBody =
   fun args env cont tau ->
   match args with
   | [] ->
-     let ln = read_inp_exp () in
+     let ln = parse (read_line ()) in
      cont (_exp_to_val ln) tau
   | file :: [] ->
      let cont' = (fun file_name tau ->
-         let content = _read_file file_name in
-         cont (ConstVal (StringConst content)) tau) in
+         let content = parse (_read_ln_from_file file_name) in
+         cont (_exp_to_val content) tau) in
      _eval file env cont' tau
   | _ -> err cont tau "_read" "arity mismatch" (ListVal (_exp_to_val_star args))
 
+let _load_file (file_name : value) : string list option =
+  match file_name with
+  | ConstVal (StringConst name) ->
+     (try 
+        Some (In_channel.with_open_text name In_channel.input_lines)
+      with Sys_error _ -> None)
+  | _ -> None
+let rec _eval_file (content : string list) filename env cont tau =
+  match content with
+  | [] -> cont filename tau
+  | ln :: rst ->
+     let cont' = (fun a _ ->
+         ListVal [ConstVal (StringConst "cont used"); a]) in
+     let result = _eval (parse ln) env cont' tau in
+     match result with
+     | ListVal [ConstVal (StringConst "cont used"); _] ->
+        _eval_file rst filename env cont tau
+     | _ -> result
+let _load_h file_name env cont tau =
+  match _load_file file_name with
+  | Some str_lst -> _eval_file str_lst file_name env cont tau
+  | None -> err cont tau "_load" "File Load Failure" file_name
+let _load : fsubrBody =
+  fun args env cont tau ->
+  match args with
+  | file :: [] ->
+     let cont' = (fun file_name tau ->
+         _load_h file_name env cont tau) in
+     _eval file env cont' tau
+  | _ -> err cont tau "_load" "Wrong Format" (ListVal (_exp_to_val_star args))
 let _show_const c : string =
   match c with
   | NumConst i -> (string_of_int i)
@@ -302,7 +318,7 @@ let _gen_toplv_cont my_lv my_env : cont =
   let rec elementary_loop iteration =
     fun value tau ->
     _print my_lv iteration value;
-    let inp = read_inp_exp () in
+    let inp = parse (read_line ()) in
     _eval inp my_env (elementary_loop (next_iter iteration)) tau in
   elementary_loop first_iteration
 
@@ -519,6 +535,7 @@ let fsubr_table_0_h =
    _or;
    _begin;
    _read;
+   _load;
    _openloop;
    _cond;
    _blond_exit;
@@ -777,6 +794,7 @@ let table_common_fsubr_ids =
     "and"; "or";
     "begin";
     "read";
+    "load";
     "openloop";
     "cond";
     "blond-exit";

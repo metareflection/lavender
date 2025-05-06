@@ -9,6 +9,7 @@
 %token FALSE
 %token LPAREN
 %token RPAREN
+%token DOUBLEQUOTE
 %token EOF
 %token <string> UNDEF
 
@@ -23,8 +24,10 @@ sexp:
   | i = INT { ConstExp (NumConst i) }
   | TRUE { ConstExp (BoolConst true) }
   | FALSE { ConstExp (BoolConst false) }
-  | s = STRINGLIT { ConstExp (StringConst s) }
   | x = ID { VarExp x }
+  | DOUBLEQUOTE; DOUBLEQUOTE { ConstExp (StringConst "") }
+  | DOUBLEQUOTE; x = ID ; DOUBLEQUOTE { ConstExp (StringConst x) }
+  | DOUBLEQUOTE; s = STRINGLIT ; DOUBLEQUOTE { ConstExp (StringConst s) }
   | u = UNDEF { ConstExp (StringConst ("Invalid Character" ^ u)) }
   | LPAREN; RPAREN { ListExp [] } 
   | LPAREN; elst = exp_lst; RPAREN { ListExp elst } 
