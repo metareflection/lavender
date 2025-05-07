@@ -1,0 +1,6 @@
+# dune init project lavender
+# OCAMLPARAM: unset
+# Shared cache: enabled-except-user-rules
+# Shared cache location: /home/charles/.cache/dune/db
+# Workspace root: /home/charles/projects/research/lavender/lavender/lavender
+# Auto-detected concurrency: 8

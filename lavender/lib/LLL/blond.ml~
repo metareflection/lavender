@@ -1,0 +1,45 @@
+module BlondLevel =
+  struct
+    type var = string
+    type const =
+      | NumConst of int
+      | StringConst of string
+      | BoolConst of bool
+    type exp =
+      | ConstExp of const
+      | VarExp of var
+      | ListExp of exp list
+    type value =
+      | ConstVal of const
+      | VarVal of var
+      | FunVal of applicable
+      | ListVal of value list
+      | Error of string * string * value (* location, message, cause *)
+    (* list of mutable lists, mapping vars to refernces of vals *)
+    and local_env = (var * value) list ref
+    and env = local_env list
+    and cont = value -> meta_cont -> value
+    and meta_cont = Tower of (env * cont) * (unit -> meta_cont)
+
+    and lambdaAbsBody = (value list) -> cont -> meta_cont -> value
+    and fsubrBody = (exp list) -> env -> cont -> meta_cont -> value
+    and lambdaAbs = int * lambdaAbsBody
+    and subr =
+      | ThunkSubr of (unit -> value)
+      | UnarySubr of (value -> value)
+      | BinarySubr of (value -> value -> value)
+      | TernarySubr of (value -> value -> value -> value)
+    and fsubr = int * fsubrBody
+    and delta_reifier = value -> value -> value -> env -> cont -> meta_cont -> value
+    and gamma_reifier = value -> value -> value -> cont -> meta_cont -> value
+
+    and applicable =
+      | Abs of lambdaAbs
+      | Subr of subr
+      | FSubr of fsubr
+      | ReifiedEnv of env
+      | ReifiedCont of cont
+      | Delta of delta_reifier
+      | Gamma of gamma_reifier
+    
+  end

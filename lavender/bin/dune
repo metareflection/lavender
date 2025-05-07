@@ -1,0 +1,4 @@
+(executable
+ (public_name lavender)
+ (name main)
+ (libraries lavender))
