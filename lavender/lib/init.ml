@@ -34,9 +34,73 @@ let parse (s : string) : exp =
 
 let lavender_banner =
   ConstVal (StringConst "---Lavender Launching---")
+
 (***************************************************************************************)
 (***************** Built in Special Forms of Lavender in Common Environment ***************)
 (***************************************************************************************)
+
+(*
+  Meaning spawns a new level, and result of new level goes back to old level, using old level's
+  semantics without changing it. 
+
+  We can later define a different reflector that does change the evaluator when it comes back
+*)
+let _check_cont_spawn (exp_rfl : exp) (env_rfl : env)
+      (cont_rfl : applicable) (eval_rfl : eval_func) env cont (efun : eval_func) tau : value =
+  match cont_rfl with
+  | Subr (UnarySubr func) ->
+     (* back to old eval when new level terminates *)
+     let cont' = (fun a tau -> _terminate_level efun (func a) tau) in 
+     _eval exp_rfl env_rfl cont' eval_rfl (_meta_push env cont efun tau)
+  | FSubr (1,func) ->
+     func [exp_rfl] env_rfl (_terminate_level efun) eval_rfl (_meta_push env cont efun tau)
+  | Abs (1,func) ->
+     let cont' = (fun a tau ->
+         func [a] (_top_cont tau) (_meta_pop efun tau)) in
+     _eval exp_rfl env_rfl cont' eval_rfl (_meta_push env cont efun tau)
+  | ReifiedEnv env_re ->
+     let cont' =
+       (fun i tau ->
+         _R_lookup_then_cont i env_re (_terminate_level efun) tau "environment") in
+     _eval exp_rfl env_rfl cont' eval_rfl (_meta_push env cont efun tau)
+  | ReifiedCont cont_re ->
+     _eval exp_rfl env_rfl cont_re eval_rfl (_meta_push env cont efun tau)
+  | Delta d ->
+     d (_exp_up exp_rfl) (_env_up env_rfl)
+       (_cont_up (_terminate_level efun))
+       (_eval_up eval_rfl) env cont tau
+  | Gamma g ->
+     g (_exp_up exp_rfl) (_env_up env_rfl)
+       (_cont_up (_terminate_level efun))
+       (_eval_up eval_rfl) cont tau
+  | Abs _ -> err cont tau "_meaning" "pitfall lambda abs/proc" (FunVal cont_rfl) 
+  | Subr _ -> err cont tau "_meaning" "pitfall subr" (FunVal cont_rfl) 
+  | FSubr _ -> err cont tau "_meaning" "pitfall fsubr" (FunVal cont_rfl) 
+(* a1 has to be expressible to type check*)
+let _check_and_spawn (exp_val : value) (env_val : value)
+      (cont_val : value) (eval_val : value) env cont efun tau : value =
+  match a2, a3 with
+  | FunVal (ReifiedEnv new_env), FunVal new_cont, FunVal (ReifiedEval new_eval) ->
+     _check_cont_spawn (_exp_down a1) new_env new_cont new_eval env cont efun tau
+  | _ -> err cont tau "_meaning" "polluted environment or pitfall due to not fun"
+           (ListVal (a2 :: [a3]))
+
+(* takes expressions denoting starting expression, environment, continuation,
+   and evaluator, of the newly spawned level, and actually spawn it *)
+let _meaning : fsubrBody =
+  fun args env cont efun tau ->
+  match args with
+  | arg1 :: arg2 :: arg3 :: arg4 :: _ ->
+     let cont'''' =  (fun a1 a2 a3 a4 tau ->
+         _check_and_spawn a1 a2 a3 a4 env cont efun tau) in
+     let cont''' = (fun a1 a2 a3 tau -> _eval arg4 env (cont'''' a1 a2 a3) efun tau) in
+     let cont'' = (fun a1 a2 tau -> _eval arg3 env (cont''' a1 a2) efun tau) in
+     let cont' = (fun a1 tau -> _eval arg2 env (cont'' a1) efun tau) in
+     _eval arg1 env cont' efun tau
+  | _ -> undef cont tau "_meaning"
+
+
+
 let _quote : fsubrBody =
   fun args _ cont tau ->
   match args with
