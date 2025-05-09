@@ -1,11 +1,5 @@
 #require "ppx_jane"
-(*
-some goals:
-1. meta tag and level lang tag, whether needed or not, and related changes
-2. reification of eval, related changes
-   - terminate_level, should meta_cont be a function that takes func instead?
-   - in apply delta and apply gamma, need to supply func for metalevel for meta_pop
-*)
+
 (******************************************************************************)
 (********************* Types & Related Operations *****************************)
 (******************************************************************************)
@@ -365,31 +359,29 @@ and _apply_evaluator (func : eval_func) args env cont (_ : eval_func) tau : valu
   func (ListExp args) env cont tau
                                                             
 (******************* Applying Reifiers **********************)
-(* need to supply func for metalevel for meta_pop *)
 and _apply_delta (d : delta_reifier) args env cont efun tau =
-  d (ListVal (_exp_up_star args)) (_env_up env) (_cont_up cont)
-    (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop tau)
+  match args with
+  | [] ->
+     d (ListVal []) (_env_up env) (_cont_up cont)
+       (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop (make_init_eval ()) tau)
+  | lang :: args_rst ->
+     match _eval lang env cont efun tau with
+     | FunVal (ReifiedEval lang_eval) ->
+        d (ListVal (_exp_up_star args_rst)) (_env_up env) (_cont_up cont)
+          (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop lang_eval tau)
+     | _ ->
+        d (ListVal (_exp_up_star args)) (_env_up env) (_cont_up cont)
+          (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop (make_init_eval ()) tau)
 and _apply_gamma (g : gamma_reifier) args env cont efun tau =
-  g (ListVal (_exp_up_star args)) (_env_up env) (_cont_up cont)
-    (_eval_up efun) (_top_cont tau) (_meta_pop tau)
-
-
-
-(* 
-   If the whole expression is defined in the lang of current level,
-   evaluate it using the current level's evaluator.
-   
-   If the expression itself is an expression for some metaprogramming
-   facility, and contains subexpressions that are expressions of current level,
-   
-   If the expression itself is an expresion of the current level, but contains
-   a subexpression that's a metaprogramming facility
-   (e.g. a call to openloop inside a relational query or an imperative statement)
- *)
-
-(*
-  func can only evaluate full expressions in target language 
-
-func defines what to do with constants, variables, and LangExp
-*)
-
+  match args with
+  | [] ->
+     g (ListVal []) (_env_up env) (_cont_up cont)
+       (_eval_up efun) (_top_cont tau) (_meta_pop (make_init_eval ()) tau)
+  | lang :: args_rst ->
+     match _eval lang env cont efun tau with
+     | FunVal (ReifiedEval lang_eval) ->
+        g (ListVal (_exp_up_star args_rst)) (_env_up env) (_cont_up cont)
+          (_eval_up efun) (_top_cont tau) (_meta_pop lang_eval tau)
+     | _ ->
+        g (ListVal (_exp_up_star args)) (_env_up env) (_cont_up cont)
+          (_eval_up efun) (_top_cont tau) (_meta_pop (make_init_eval ()) tau)
