@@ -21,8 +21,18 @@ let _extend_env paras vals (env : env) : env =
 
 let make_init_env =
   fun () -> _extend_env [] [] []
+
+let rec default_eval exp env cont tau =
+  match exp with
+  | VarExp var ->
+     _lookup var env cont tau
+  | ConstExp c -> cont (ConstVal c) tau
+  | ListExp [] -> cont (ListVal []) tau
+  | ListExp (fun_exp :: args) ->
+     _eval (ListExp (Meta :: fun_exp :: args)) env cont default_eval tau
+
 let make_init_eval =
-  fun () -> default_lisp_evaluator
+  fun () -> default_eval
 let parse (s : string) : exp =
   try    
     let lexbuf = Lexing.from_string s in

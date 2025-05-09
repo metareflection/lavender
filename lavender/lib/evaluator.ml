@@ -16,7 +16,6 @@ type exp =
   | ConstExp of const
   | VarExp of var
   | Meta
-  | LeveLang
   | ListExp of exp list  [@@deriving sexp]
 
 
@@ -71,6 +70,7 @@ and _exp_to_val (e : exp) : value =
   match e with
   | ConstExp c -> ConstVal c
   | VarExp var -> VarVal var
+  | Meta -> ConstVal (StringConst "Meta")
   | ListExp elst -> ListVal (_exp_to_val_star elst)
 let _env_to_val (env : env) : value = FunVal (ReifiedEnv env) 
 let _cont_to_val (cont : cont) : value = FunVal (ReifiedCont cont)
@@ -186,16 +186,14 @@ let rec _lookup var env cont tau : value =
 
 let rec _eval (expr : exp) env cont efun tau : value =
   match expr with
-  | VarExp var ->
-     _lookup var env cont tau
-  | ConstExp c -> cont (ConstVal c) tau
-  | ListExp [] -> cont (ListVal []) tau
-  | ListExp (fun_exp :: args) ->
+  | ListExp (Meta :: fun_exp :: args) ->
      let cont' = (fun f_val tau ->
          (_apply f_val args env cont efun tau)) in
      _eval fun_exp env cont' efun tau
+  | _ -> efun expr env cont tau
+  
   | LangExp _ ->
-     efun expr env cont tau
+     
 
 and _apply (f_val : value) args env cont efun tau =
   match f_val with
