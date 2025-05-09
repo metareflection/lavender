@@ -21,7 +21,8 @@ let _extend_env paras vals (env : env) : env =
 
 let make_init_env =
   fun () -> _extend_env [] [] []
-
+let make_init_eval =
+  fun () -> default_lisp_evaluator
 let parse (s : string) : exp =
   try    
     let lexbuf = Lexing.from_string s in
@@ -310,7 +311,7 @@ let _read_ln_from_file (file_name : value) =
   | _ -> "File Names Must Be Strings!"
 
 let _read : fsubrBody =
-  fun args env cont efun  tau ->
+  fun args env cont efun tau ->
   match args with
   | [] ->
      let ln = parse (read_line ()) in
@@ -329,28 +330,28 @@ let _load_file (file_name : value) : string list option =
         Some (In_channel.with_open_text name In_channel.input_lines)
       with Sys_error _ -> None)
   | _ -> None
-let rec _eval_file (content : string list) filename env cont tau =
+let rec _eval_file (content : string list) filename env cont efun tau =
   match content with
   | [] -> cont filename tau
   | ln :: rst ->
      let cont' = (fun a _ ->
          ListVal [ConstVal (StringConst "cont used"); a]) in
-     let result = _eval (parse ln) env cont' tau in
+     let result = _eval (parse ln) env cont' efun tau in
      match result with
      | ListVal [ConstVal (StringConst "cont used"); _] ->
-        _eval_file rst filename env cont tau
+        _eval_file rst filename env cont efun tau
      | _ -> result
-let _load_h file_name env cont tau =
+let _load_h file_name env cont efun tau =
   match _load_file file_name with
-  | Some str_lst -> _eval_file str_lst file_name env cont tau
+  | Some str_lst -> _eval_file str_lst file_name env cont efun tau
   | None -> err cont tau "_load" "File Load Failure" file_name
 let _load : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | file :: [] ->
      let cont' = (fun file_name tau ->
-         _load_h file_name env cont tau) in
-     _eval file env cont' tau
+         _load_h file_name env cont efun tau) in
+     _eval file env cont' efun tau
   | _ -> err cont tau "_load" "Wrong Format" (ListVal (_exp_to_val_star args))
 let _show_const c : string =
   match c with
@@ -382,36 +383,49 @@ let _print (level : int) (iteration : int) (value : value) =
   print_string ">"
 
 let first_iteration = 0
-let _gen_toplv_cont my_lv my_env : cont =
+let _gen_toplv_cont my_lv my_env my_eval : cont =
   let rec elementary_loop iteration =
     fun value tau ->
     _print my_lv iteration value;
     let inp = parse (read_line ()) in
-    _eval inp my_env (elementary_loop (next_iter iteration)) tau in
+    _eval inp my_env (elementary_loop (next_iter iteration)) my_eval tau in
   elementary_loop first_iteration
 
-let _gen_metalevel new_level new_lv_env env cont tau =
-  let new_level_cont = _gen_toplv_cont new_level new_lv_env in
-  new_level_cont lavender_banner (_meta_push env cont tau)
+let _gen_metalevel new_level new_lv_env new_lv_eval env cont efun tau =
+  let new_level_cont = _gen_toplv_cont new_level new_lv_env new_lv_eval in
+  new_level_cont lavender_banner (_meta_push env cont efun tau)
 let _openloop : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | arg1 :: [] ->
      let cont' = (fun new_level tau ->
          match new_level with
          | ConstVal (NumConst n) ->
-            _gen_metalevel n (make_init_env ()) env cont tau
+            _gen_metalevel n (make_init_env ()) (make_init_eval ()) env cont efun tau
          | _ -> undef cont tau "_openloop") in
-     _eval arg1 env cont' tau
+     _eval arg1 env cont' efun tau
   | arg1 :: arg2 :: [] ->
      let cont'' = (fun new_lv new_env_val tau ->
          match new_lv, new_env_val with
          | ConstVal (NumConst n), FunVal (ReifiedEnv new_env) ->
-            _gen_metalevel n new_env env cont tau
+            _gen_metalevel n new_env (make_init_eval ()) env cont efun tau
          | _ ->
             err cont tau "_openloop" "not a reified environment" new_env_val) in
-     let cont' = (fun new_lv tau -> _eval arg2 env (cont'' new_lv) tau) in
-     _eval arg1 env cont' tau
+     let cont' = (fun new_lv tau -> _eval arg2 env (cont'' new_lv) efun tau) in
+     _eval arg1 env cont' efun  tau
+  | arg1 :: arg2 :: arg3 :: [] ->
+     let cont''' = (fun new_lv new_env_val new_eval_val tau ->
+         match new_lv, new_env_val, new_eval_val with
+         | ConstVal (NumConst n),
+           FunVal (ReifiedEnv new_env),
+           FunVal (ReifiedEval new_eval) ->
+            _gen_metalevel n new_env new_eval env cont efun tau
+         | _ ->
+            err cont tau "_openloop" "not a reified environment" new_env_val) in
+     let cont'' = (fun new_lv new_env_val tau ->
+         _eval arg3 env (cont''' new_lv new_env_val) efun tau) in
+     let cont' = (fun new_lv tau -> _eval arg2 env (cont'' new_lv) efun tau) in
+     _eval arg1 env cont' efun  tau
   | _ -> err cont tau "_openloop" "wrong arity" (ListVal (_exp_to_val_star args))
 
 let _extend lsvar lsval env_re cont tau =
@@ -425,16 +439,16 @@ let _extend lsvar lsval env_re cont tau =
   | _ -> err cont tau "_extend_reified_env" "not a vars, vals, env triple"
            (ListVal (lsvar :: lsval :: [env_re]))
 let _extend_reified_env : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | var_lst :: val_lst :: env_re :: [] ->
      let cont''' = (fun a1 a2 a3 tau ->
          _extend a1 a2 a3 cont tau) in
      let cont'' = (fun a1 a2 tau ->
-         _eval env_re env (cont''' a1 a2) tau) in
+         _eval env_re env (cont''' a1 a2) efun tau) in
      let cont' = (fun a1 tau ->
-         _eval val_lst env (cont'' a1) tau) in
-     _eval var_lst env cont' tau
+         _eval val_lst env (cont'' a1) efun tau) in
+     _eval var_lst env cont' efun tau
   | _ -> undef cont tau "_extend_reified_env"
 let rec _let_idlis bindings =
   match bindings with
@@ -443,7 +457,7 @@ let rec _let_idlis bindings =
      name :: _let_idlis rst_bds
   | _ -> [] (* undefined in scheme impl *)
 
-let rec _let_evlis bindings env cont tau =
+let rec _let_evlis bindings env cont efun tau =
   match bindings with
   | (ListExp (_ :: [body1])) :: rst_bds ->
      let cont' = (fun v tau ->
@@ -452,22 +466,22 @@ let rec _let_evlis bindings env cont tau =
          | _ ->
             _let_evlis rst_bds env
               (fun lv tau -> cont (cons_list_val v lv) tau)
-              tau) in
-     _eval body1 env cont' tau
+              efun tau) in
+     _eval body1 env cont' efun tau
   | _ -> undef cont tau "_let_evlis"
 
 let _let : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | (ListExp []) :: body :: [] ->
-     _eval body env cont tau
+     _eval body env cont efun tau
   | (ListExp bindings) :: body :: [] ->
      let cont' = (fun vals tau ->
          match vals with
          | ListVal val_lst ->
-            _eval body (_extend_env (_let_idlis bindings) val_lst env) cont tau
+            _eval body (_extend_env (_let_idlis bindings) val_lst env) cont efun tau
          | _ -> undef cont tau "_let" ) in
-     _let_evlis bindings env cont' tau
+     _let_evlis bindings env cont' efun tau
   | _ -> undef cont tau "_let"
 
 let rec one_env_update_vals env vals =
@@ -484,89 +498,102 @@ let env_update_vals (env : env) vals =
   | _, _ -> ()
 
 let _letrec : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | (ListExp []) :: body :: [] ->
-     _eval body env cont tau
+     _eval body env cont efun tau
   | (ListExp bindings) :: body :: [] ->
      let env = _extend_env (_let_idlis bindings) [] env in
      let cont' = (fun vals tau ->
          env_update_vals env vals;
-         _eval body env cont tau) in
-     _let_evlis bindings env cont' tau
+         _eval body env cont efun tau) in
+     _let_evlis bindings env cont' efun tau
   | _ -> undef cont tau "_letrec"
 
 let _rec : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | VarExp name :: body :: [] ->
      let env = _extend_env [name] [] env in
      let cont' = (fun a tau ->
          env_update_vals env (ListVal [a]);
          cont a tau) in
-     _eval body env cont' tau
+     _eval body env cont' efun tau
   | _ -> undef cont tau "_rec"
 
-let rec _let_star_evlis bindings body env cont tau =
+let rec _let_star_evlis bindings body env cont efun tau =
   match bindings with
-  | [] -> _eval body env cont tau
+  | [] -> _eval body env cont efun tau
   | (ListExp (VarExp name1 :: [body1])) :: rst_bds ->
      let cont' = (fun a tau ->
          _let_star_evlis rst_bds body
                 (_extend_env [name1] [a] env)
-                cont tau) in
-     _eval body1 env cont' tau
+                cont efun tau) in
+     _eval body1 env cont' efun tau
   | _ -> undef cont tau "_let_star_evlis"
 
 let _let_star : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | (ListExp bindings) :: body :: [] ->
-     _let_star_evlis bindings body env cont tau
+     _let_star_evlis bindings body env cont efun tau
   | _ -> undef cont tau "_let_star"
 
 let rec _cond : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | [] -> cont (ConstVal (StringConst "unmatched cond")) tau
   | (ListExp (cond1 :: [body1])) :: conds_rst ->
      (match cond1 with
       | ConstExp (StringConst "else") ->
-         _eval body1 env cont tau
+         _eval body1 env cont efun tau
       | _ ->
          let cont' = (fun a tau ->
              match a with
              | ConstVal (BoolConst false) ->
-                _cond conds_rst env cont tau
+                _cond conds_rst env cont efun tau
              | ListVal [] ->
-                _cond conds_rst env cont tau
-             | _ -> _eval body1 env cont tau) in
-         _eval cond1 env cont' tau)
+                _cond conds_rst env cont efun tau
+             | _ -> _eval body1 env cont efun tau) in
+         _eval cond1 env cont' efun tau)
   | _ -> undef cont tau "_cond"
 
 let _reify_new_cont : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | arg1 :: [] ->
      let cont' = (fun level tau ->
          match level with
          | ConstVal (NumConst lv) ->
-            let new_cont = _gen_toplv_cont lv (make_init_env ()) in
+            let new_cont = _gen_toplv_cont lv (make_init_env ()) (make_init_eval ()) in
             cont (_cont_up new_cont) tau
          | _ -> undef cont tau "_reify_new_cont") in
-     _eval arg1 env cont' tau
+     _eval arg1 env cont' efun tau
   | arg1 :: arg2 :: [] ->
      let cont'' = (fun level env_re tau ->
          match level, env_re with
          | ConstVal (NumConst lv), FunVal (ReifiedEnv env_r) ->
-            cont (_cont_up (_gen_toplv_cont lv env_r)) tau
+            cont (_cont_up (_gen_toplv_cont lv env_r (make_init_eval ()))) tau
          | _ -> err cont tau "_reify_new_cont"
                   "not a reified environment"
                   env_re) in
      let cont' = (fun level tau ->
-         _eval arg2 env (cont'' level) tau) in
-     _eval arg1 env cont' tau
-  | _ -> err cont tau "_reify_new_cont" "arity mismatch"
+         _eval arg2 env (cont'' level) efun tau) in
+     _eval arg1 env cont' efun tau
+  | arg1 :: arg2 :: arg3 :: [] ->
+     let cont'' = (fun level env_re eval_re tau ->
+         match level, env_re, eval_re with
+         | ConstVal (NumConst lv), FunVal (ReifiedEnv env_r), FunVal (ReifiedEval eval_r) ->
+            cont (_cont_up (_gen_toplv_cont lv env_r eval_r)) tau
+         | _ -> err cont tau "_reify_new_cont"
+                  "not a reified environment"
+                  env_re) in
+     let cont'' = (fun level env_re tau ->
+         _eval arg3 env (cont'' level env_re) efun tau) in
+     let cont' = (fun level tau ->
+         _eval arg2 env (cont'' level) efun tau) in
+     _eval arg1 env cont' efun tau
+   | _ -> err cont tau "_reify_new_cont" "arity mismatch"
            (ListVal (_exp_to_val_star args))
 let _reify_new_env : subr =
  ThunkSubr
