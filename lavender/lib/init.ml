@@ -102,57 +102,60 @@ let _meaning : fsubrBody =
 
 
 let _quote : fsubrBody =
-  fun args _ cont tau ->
+  fun args _ cont _ tau ->
   match args with
   | arg1 :: _ ->
      cont (_exp_to_val arg1) tau
   | _ -> undef cont tau "_quote"
 let _if : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | arg :: arg_t :: arg_f :: [] ->
      let cont' = (fun bval tau ->
          match bval with
          | ConstVal (BoolConst b) ->
-            if b then _eval arg_t env cont tau
-            else _eval arg_f env cont tau
-         | ListVal [] -> _eval arg_f env cont tau
-         | _ -> _eval arg_t env cont tau) in
-     _eval arg env cont' tau
+            if b then _eval arg_t env cont efun tau
+            else _eval arg_f env cont efun tau
+         | ListVal [] -> _eval arg_f env cont efun tau
+         | _ -> _eval arg_t env cont efun tau) in
+     _eval arg env cont' efun tau
   | _ -> undef cont tau "_if"
 
 let _lambda : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | (ListExp paras) :: body :: [] ->
      let para_vars = List.map exp_to_var paras in
      let bd = (fun val_lst cont tau ->
-         _eval body (_extend_env para_vars val_lst env) cont tau) in
+         _eval body (_extend_env para_vars val_lst env) cont efun tau) in
      let lbd = FunVal (Abs (List.length paras,bd)) in
      cont lbd tau
   | _ -> undef cont tau "_lambda"
 let _delta : fsubrBody =
-  fun args _ cont tau ->
+  fun args _ cont efun tau ->
   match args with
-  | (ListExp (para_exp :: para_env :: [para_cont])) :: body :: [] ->
-     let paras = para_exp :: para_env :: [para_cont] in
+  | (ListExp (para_exp :: para_env :: para_cont :: [para_eval])) :: body :: [] ->
+     let paras = para_exp :: para_env :: para_cont :: [para_eval] in
      let para_vars = List.map exp_to_var paras in
-     let d = (fun val_exp val_env val_cont env' cont' tau ->
-         _eval body (_extend_env para_vars (val_exp :: val_env :: [val_cont]) env') cont' tau) in
+     let d = (fun val_exp val_env val_cont val_eval env' cont' tau ->
+         _eval body (_extend_env para_vars
+                       (val_exp :: val_env :: val_cont :: [val_eval])
+                       env') cont' efun tau) in
      let dt = FunVal (Delta d) in
      cont dt tau
   | arg :: _ ->
      err cont tau "_delta" "wrong para shape" (_exp_to_val arg)
   | _ -> undef cont tau "_delta"
 let _gamma : fsubrBody =
-  fun args _ cont stau ->
+  fun args _ cont efun stau ->
   match args with
-  | (ListExp (para_exp :: para_env :: [para_cont])) :: body :: [] ->
-     let paras = para_exp :: para_env :: [para_cont] in
+  | (ListExp (para_exp :: para_env :: para_cont :: [para_eval])) :: body :: [] ->
+     let paras = para_exp :: para_env :: para_cont :: [para_eval] in
      let para_vars = List.map exp_to_var paras in
-     let g = (fun val_exp val_env val_cont cont' tau ->
-         _eval body (_extend_env para_vars (val_exp :: val_env :: [val_cont])
-                       (_top_env stau)) cont' tau) in
+     let g = (fun val_exp val_env val_cont val_eval cont' tau ->
+         _eval body (_extend_env para_vars
+                       (val_exp :: val_env :: val_cont :: [val_eval])
+                       (_top_env stau)) efun cont' tau) in
      let gm = FunVal (Gamma g) in
      cont gm stau
   | arg :: _ -> err cont stau "_gamma" "wrong para shape" (_exp_to_val arg)
@@ -166,23 +169,24 @@ let _update_env (var : var) (value : value) (env : local_env) =
        _replace tbl var value in
   env := new_tbl
 let _common_define : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | (VarExp name) :: body :: [] ->
      let cont' = (fun a tau ->
          _update_env name a table_common;
          cont (VarVal name) tau) in
-     _eval body env cont' tau
+     _eval body env cont' efun tau
   | arg :: _ -> err cont tau "_common_define" "undefineable" (_exp_to_val arg)
   | _ -> undef cont tau "_common_define"
+
 let _define : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args, env with
   | (VarExp name) :: body :: [], global_env :: _ ->
      let cont' = (fun a tau ->
          _update_env name a global_env;
          cont (VarVal name) tau) in
-     _eval body env cont' tau
+     _eval body env cont' efun tau
   | arg :: _, _ -> err cont tau "_define" "undefineable" (_exp_to_val arg)
   | _,_ -> undef cont tau "_define"
 let rec _L_set_h var new_val env1 env_rst cont tau =
@@ -206,12 +210,12 @@ let _L_set var new_val env cont tau =
      _L_set_h var new_val env1 env_rst cont tau
   | _ -> undef cont tau "_L_set"
 let _set : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | (VarExp name) :: body :: [] ->
      let cont' = (fun a tau ->
          _L_set name a env cont tau) in
-     _eval body env cont' tau
+     _eval body env cont' efun tau
   | arg :: _ -> err cont tau "_set" "undefineable" (_exp_to_val arg)
   | _ -> undef cont tau "_set"
 let _ef : subr =
@@ -234,64 +238,64 @@ let val_member_or_eq_exp v e =
     match e with
     | ListExp elst -> val_member_exp_lst v elst
     | _ -> false
-let rec _case_loop val_pred args env cont tau =
+let rec _case_loop val_pred args env cont efun tau =
   match args with
   | [] -> err cont tau "_case_loop" "unmatched" val_pred
   | ListExp (case1_form :: [case1_body]) :: cases_rst ->
      if case1_form = ConstExp (StringConst "else")
-     then _eval case1_body env cont tau
+     then _eval case1_body env cont efun tau
      else
        if val_member_or_eq_exp val_pred case1_form
-       then _eval case1_body env cont tau
-       else _case_loop val_pred cases_rst env cont tau
+       then _eval case1_body env cont efun tau
+       else _case_loop val_pred cases_rst env cont efun tau
   | _ -> undef cont tau "_case_loop"
 let _case : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | pred :: args_rst ->
      _eval pred env (fun a tau ->
-         _case_loop a args_rst env cont tau) tau
+         _case_loop a args_rst env cont efun tau) efun tau
   | _ -> undef cont tau "_case"
-let rec _and_loop args env cont tau =
+let rec _and_loop args env cont efun tau =
   match args with
-  | pred :: [] -> _eval pred env cont tau
+  | pred :: [] -> _eval pred env cont efun tau
   | pred1 :: preds_rst ->
      let cont' = (fun a tau ->
          if a = ListVal [] || a = ConstVal (BoolConst false)
          then cont (ConstVal (BoolConst false)) tau
-         else _and_loop preds_rst env cont tau) in
-     _eval pred1 env cont' tau
+         else _and_loop preds_rst env cont efun tau) in
+     _eval pred1 env cont' efun tau
   | _ -> undef cont tau "_and_loop"
 let _and : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun efun tau ->
   match args with
   | [] -> cont (ConstVal (BoolConst true)) tau 
   | _ :: _ ->
-     _and_loop args env cont tau
-let rec _or_loop args env cont tau =
+     _and_loop args env cont efun tau
+let rec _or_loop args env cont efun tau =
   match args with
-  | pred :: [] -> _eval pred env cont tau
+  | pred :: [] -> _eval pred env cont efun tau
   | pred1 :: preds_rst ->
      let cont' = (fun a tau ->
          if a = ListVal [] || a = ConstVal (BoolConst false)
-         then _or_loop preds_rst env cont tau
+         then _or_loop preds_rst env cont efun tau
          else cont a tau) in
-     _eval pred1 env cont' tau
+     _eval pred1 env cont' efun tau
   | _ -> undef cont tau "_or_loop"
 let _or : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
   | [] -> cont (ConstVal (BoolConst false)) tau 
   | _ :: _ ->
-     _or_loop args env cont tau
+     _or_loop args env cont efun tau
 
 let rec _begin : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun tau ->
   match args with
-  | stmt :: [] -> _eval stmt env cont tau
+  | stmt :: [] -> _eval stmt env cont efun tau
   | stmt1 :: stmts_rst ->
-     let cont' = (fun _ tau -> _begin stmts_rst env cont tau) in
-     _eval stmt1 env cont' tau
+     let cont' = (fun _ tau -> _begin stmts_rst env cont efun tau) in
+     _eval stmt1 env cont' efun tau
   | _ -> undef cont tau "_begin"
 
 let _read_ln_from_file (file_name : value) =
@@ -306,7 +310,7 @@ let _read_ln_from_file (file_name : value) =
   | _ -> "File Names Must Be Strings!"
 
 let _read : fsubrBody =
-  fun args env cont tau ->
+  fun args env cont efun  tau ->
   match args with
   | [] ->
      let ln = parse (read_line ()) in
@@ -315,7 +319,7 @@ let _read : fsubrBody =
      let cont' = (fun file_name tau ->
          let content = parse (_read_ln_from_file file_name) in
          cont (_exp_to_val content) tau) in
-     _eval file env cont' tau
+     _eval file env cont' efun tau
   | _ -> err cont tau "_read" "arity mismatch" (ListVal (_exp_to_val_star args))
 
 let _load_file (file_name : value) : string list option =
