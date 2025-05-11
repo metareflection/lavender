@@ -22,18 +22,12 @@ let _extend_env paras vals (env : env) : env =
 let make_init_env =
   fun () -> _extend_env [] [] []
 
-let rec default_eval exp env cont tau =
-  match exp with
-  | VarExp var ->
-     _lookup var env cont tau
-  | ConstExp c -> cont (ConstVal c) tau
-  | ListExp [] -> cont (ListVal []) tau
-  | ListExp (fun_exp :: args) ->
-     _eval (ListExp (Meta :: fun_exp :: args)) env cont default_eval tau
 
 let make_init_eval =
   fun () -> default_eval
 let parse (s : string) : exp =
+  exp_of_sexp (Core.Sexp.of_string s)
+(*let parse (s : string) : exp =
   try    
     let lexbuf = Lexing.from_string s in
     let ast = Parser.prog Lexer.read lexbuf in
@@ -41,7 +35,7 @@ let parse (s : string) : exp =
   with
   | Parser.Error ->
     ConstExp (StringConst ("The String: \n" ^ s ^ "\n Cannot Be Parsed"))
-
+ *)
 
 let lavender_banner =
   ConstVal (StringConst "---Lavender Launching---")
@@ -76,6 +70,8 @@ let _check_cont_spawn (exp_rfl : exp) (env_rfl : env)
      _eval exp_rfl env_rfl cont' eval_rfl (_meta_push env cont efun tau)
   | ReifiedCont cont_re ->
      _eval exp_rfl env_rfl cont_re eval_rfl (_meta_push env cont efun tau)
+  | ReifiedEval eval_re ->
+     eval_re exp_rfl env_rfl (_terminate_level efun) (_meta_push env cont efun tau)
   | Delta d ->
      d (_exp_up exp_rfl) (_env_up env_rfl)
        (_cont_up (_terminate_level efun))
@@ -90,11 +86,11 @@ let _check_cont_spawn (exp_rfl : exp) (env_rfl : env)
 (* a1 has to be expressible to type check*)
 let _check_and_spawn (exp_val : value) (env_val : value)
       (cont_val : value) (eval_val : value) env cont efun tau : value =
-  match a2, a3 with
+  match env_val, cont_val, eval_val with
   | FunVal (ReifiedEnv new_env), FunVal new_cont, FunVal (ReifiedEval new_eval) ->
-     _check_cont_spawn (_exp_down a1) new_env new_cont new_eval env cont efun tau
-  | _ -> err cont tau "_meaning" "polluted environment or pitfall due to not fun"
-           (ListVal (a2 :: [a3]))
+     _check_cont_spawn (_exp_down exp_val) new_env new_cont new_eval env cont efun tau
+  | _ -> err cont tau "_meaning" "polluted environment, pitfall due to not fun, or not eval"
+           (ListVal (env_val :: cont_val :: [eval_val]))
 
 (* takes expressions denoting starting expression, environment, continuation,
    and evaluator, of the newly spawned level, and actually spawn it *)
@@ -166,7 +162,7 @@ let _gamma : fsubrBody =
      let g = (fun val_exp val_env val_cont val_eval cont' tau ->
          _eval body (_extend_env para_vars
                        (val_exp :: val_env :: val_cont :: [val_eval])
-                       (_top_env stau)) efun cont' tau) in
+                       (_top_env stau)) cont' efun tau) in
      let gm = FunVal (Gamma g) in
      cont gm stau
   | arg :: _ -> err cont stau "_gamma" "wrong para shape" (_exp_to_val arg)
@@ -278,7 +274,7 @@ let rec _and_loop args env cont efun tau =
      _eval pred1 env cont' efun tau
   | _ -> undef cont tau "_and_loop"
 let _and : fsubrBody =
-  fun args env cont efun efun tau ->
+  fun args env cont efun tau ->
   match args with
   | [] -> cont (ConstVal (BoolConst true)) tau 
   | _ :: _ ->
@@ -332,7 +328,7 @@ let _read : fsubrBody =
          cont (_exp_to_val content) tau) in
      _eval file env cont' efun tau
   | _ -> err cont tau "_read" "arity mismatch" (ListVal (_exp_to_val_star args))
-
+(*
 let _load_file (file_name : value) : string list option =
   match file_name with
   | ConstVal (StringConst name) ->
@@ -340,20 +336,29 @@ let _load_file (file_name : value) : string list option =
         Some (In_channel.with_open_text name In_channel.input_lines)
       with Sys_error _ -> None)
   | _ -> None
-let rec _eval_file (content : string list) filename env cont efun tau =
+ *)
+let _load_file (file_name : value) : exp list option =
+  match file_name with
+  | ConstVal (StringConst name) ->
+     (try 
+        Some (Core.Sexp.load_sexps_conv_exn name exp_of_sexp)
+      with Sys_error _ -> None)
+  | _ -> None
+           
+let rec _eval_file (content : exp list) filename env cont efun tau =
   match content with
   | [] -> cont filename tau
-  | ln :: rst ->
+  | exp1 :: rst ->
      let cont' = (fun a _ ->
          ListVal [ConstVal (StringConst "cont used"); a]) in
-     let result = _eval (parse ln) env cont' efun tau in
+     let result = _eval exp1 env cont' efun tau in
      match result with
-     | ListVal [ConstVal (StringConst "cont used"); _] ->
+     | ListVal (ConstVal (StringConst "cont used") :: _) ->
         _eval_file rst filename env cont efun tau
      | _ -> result
 let _load_h file_name env cont efun tau =
   match _load_file file_name with
-  | Some str_lst -> _eval_file str_lst file_name env cont efun tau
+  | Some exp_lst -> _eval_file exp_lst file_name env cont efun tau
   | None -> err cont tau "_load" "File Load Failure" file_name
 let _load : fsubrBody =
   fun args env cont efun tau ->
@@ -626,7 +631,7 @@ let _switch_cont_mode : subr =
         ConstVal (StringConst "set to jumpy")))
 
 let _lavender_exit : fsubrBody =
-  fun _ _ _ _ ->
+  fun _ _ _ _ _ ->
   ConstVal (StringConst "farvel!")
 
 (***************************************************************************************)

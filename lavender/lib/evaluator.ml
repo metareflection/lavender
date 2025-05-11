@@ -1,22 +1,21 @@
-#require "ppx_jane"
-
+open Sexplib.Std
 (******************************************************************************)
 (********************* Types & Related Operations *****************************)
 (******************************************************************************)
 
 (********************* Types *****************************)
-type var = string
+type var = string [@@deriving sexp]
 
 type const =
   | NumConst of int
   | StringConst of string
-  | BoolConst of bool
+  | BoolConst of bool [@@deriving sexp]
  
 type exp =
   | ConstExp of const
   | VarExp of var
   | Meta
-  | ListExp of exp list  [@@deriving sexp]
+  | ListExp of exp list [@@deriving sexp]
 
 
 type value =
@@ -184,16 +183,24 @@ let rec _lookup var env cont tau : value =
      | Some val_found -> cont val_found tau
      | None -> _lookup var env_rst cont tau
 
-let rec _eval (expr : exp) env cont efun tau : value =
+let rec default_eval exp env cont tau =
+  match exp with
+  | VarExp var ->
+     _lookup var env cont tau
+  | ConstExp c -> cont (ConstVal c) tau
+  | Meta -> cont (ConstVal (StringConst "Meta")) tau
+  | ListExp [] -> cont (ListVal []) tau
+  | ListExp (fun_exp :: args) ->
+     _eval (ListExp (Meta :: fun_exp :: args)) env cont default_eval tau
+
+and _eval (expr : exp) env cont efun tau : value =
   match expr with
   | ListExp (Meta :: fun_exp :: args) ->
      let cont' = (fun f_val tau ->
          (_apply f_val args env cont efun tau)) in
      _eval fun_exp env cont' efun tau
   | _ -> efun expr env cont tau
-  
-  | LangExp _ ->
-     
+      
 
 and _apply (f_val : value) args env cont efun tau =
   match f_val with
@@ -332,7 +339,7 @@ and _apply_environment (f : env) args env cont efun tau : value =
      _eval arg1 env cont' efun tau
   | arg1 :: arg2 :: [] ->
      let cont'' = (fun var v tau ->
-         _apply_environment_set var v f cont efun tau) in
+         _apply_environment_set var v f cont tau) in
      let cont' = (fun var tau ->
          _eval arg2 env (cont'' var) efun tau) in
      _eval arg1 env cont' efun tau
@@ -347,7 +354,7 @@ and _apply_continuation_jumpy cont_r args env (cont : cont) efun tau : value =
 and _apply_continuation_pushy cont_r args env cont efun tau : value =
   match args with
   | arg1 :: [] ->
-     _eval arg1 env cont_r efun (_meta_push env cont tau)
+     _eval arg1 env cont_r efun (_meta_push env cont efun tau)
   | _ -> err cont tau "_apply_continuation_pushy" "arity mismatch" (ListVal (_exp_up_star args))
 and _apply_continuation cont_r args env cont efun tau : value =
   if !jumpy_cont then _apply_continuation_jumpy cont_r args env cont efun tau
@@ -361,7 +368,7 @@ and _apply_delta (d : delta_reifier) args env cont efun tau =
   match args with
   | [] ->
      d (ListVal []) (_env_up env) (_cont_up cont)
-       (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop (make_init_eval ()) tau)
+       (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop default_eval tau)
   | lang :: args_rst ->
      match _eval lang env cont efun tau with
      | FunVal (ReifiedEval lang_eval) ->
@@ -369,12 +376,12 @@ and _apply_delta (d : delta_reifier) args env cont efun tau =
           (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop lang_eval tau)
      | _ ->
         d (ListVal (_exp_up_star args)) (_env_up env) (_cont_up cont)
-          (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop (make_init_eval ()) tau)
+          (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop default_eval tau)
 and _apply_gamma (g : gamma_reifier) args env cont efun tau =
   match args with
   | [] ->
      g (ListVal []) (_env_up env) (_cont_up cont)
-       (_eval_up efun) (_top_cont tau) (_meta_pop (make_init_eval ()) tau)
+       (_eval_up efun) (_top_cont tau) (_meta_pop default_eval tau)
   | lang :: args_rst ->
      match _eval lang env cont efun tau with
      | FunVal (ReifiedEval lang_eval) ->
@@ -382,4 +389,4 @@ and _apply_gamma (g : gamma_reifier) args env cont efun tau =
           (_eval_up efun) (_top_cont tau) (_meta_pop lang_eval tau)
      | _ ->
         g (ListVal (_exp_up_star args)) (_env_up env) (_cont_up cont)
-          (_eval_up efun) (_top_cont tau) (_meta_pop (make_init_eval ()) tau)
+          (_eval_up efun) (_top_cont tau) (_meta_pop default_eval tau)
