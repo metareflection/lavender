@@ -26,7 +26,11 @@ let make_init_env =
 let make_init_eval =
   fun () -> default_eval
 let parse (s : string) : exp =
-  exp_of_sexp (Core.Sexp.of_string s)
+  try
+    exp_of_sexp (Core.Sexp.of_string s)
+  with
+  | Of_sexp_error ->
+     ConstExp (StringConst ("The String: \n" ^ s ^ "\n Cannot Be Parsed")) 
 (*let parse (s : string) : exp =
   try    
     let lexbuf = Lexing.from_string s in
@@ -38,7 +42,7 @@ let parse (s : string) : exp =
  *)
 
 let lavender_banner =
-  ConstVal (StringConst "---Lavender Launching---")
+  ConstVal (StringConst "--- Fish Fiddle De-Dee ---")
 
 (***************************************************************************************)
 (***************** Built in Special Forms of Lavender in Common Environment ***************)
@@ -127,17 +131,28 @@ let _if : fsubrBody =
          | _ -> _eval arg_t env cont efun tau) in
      _eval arg env cont' efun tau
   | _ -> undef cont tau "_if"
-
+(* define functions using default semantics *)
 let _lambda : fsubrBody =
   fun args env cont efun tau ->
   match args with
   | (ListExp paras) :: body :: [] ->
      let para_vars = List.map exp_to_var paras in
      let bd = (fun val_lst cont tau ->
-         _eval body (_extend_env para_vars val_lst env) cont efun tau) in
+         _eval body (_extend_env para_vars val_lst env) cont default_eval tau) in
      let lbd = FunVal (Abs (List.length paras,bd)) in
      cont lbd tau
   | _ -> undef cont tau "_lambda"
+
+let _fexp : fsubrBody =
+  fun args env cont efun tau ->
+  match args with
+  | para_exp :: body :: [] ->
+     let para_var = exp_to_var para_exp in
+     let fexp = (fun arg_exp env cont tau -> (*evaluators use dynamical binding*)
+         _eval body (_extend_env [para_var] [_exp_to_val arg_exp] env) cont default_eval tau) in
+     let fval = FunVal (ReifiedEval fexp) in
+     cont fval tau
+  | _ -> undef cont tau "_fexp"
 let _delta : fsubrBody =
   fun args _ cont efun tau ->
   match args with
@@ -933,12 +948,4 @@ let table_common_values =
 
 let table_common_initial =
   zip_lst table_common_ids table_common_values
-(*
 
-
-(common-define exit 
-  (lambda (x)       
-    ((delta (e r k)
-       (r 'x)))))
-
- *)
