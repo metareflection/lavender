@@ -25,9 +25,23 @@ let make_init_env =
 
 let make_init_eval =
   fun () -> default_eval
+let rec sexp_to_exp (se : sexp) : exp =
+  match se with
+  | Atom "#t" ->
+     ConstExp (BoolConst true)
+  | Atom "#f" ->
+     ConstExp (BoolConst false)
+  | Atom ("'" ^ str) ->
+     ConstExp (StringConst str)
+  | Atom str ->
+     if is_number str
+     then ConstExp (NumConst (str_to_number str))
+     else VarExp str
+  | List se_lst ->
+     ListExp (List.map sexp_to_exp se_lst)
 let parse (s : string) : exp =
   try
-    exp_of_sexp (Core.Sexp.of_string s)
+    sexp_to_exp (Core.Sexp.of_string s)    
   with
   | Of_sexp_error ->
      ConstExp (StringConst ("The String: \n" ^ s ^ "\n Cannot Be Parsed")) 
@@ -148,7 +162,7 @@ let _fexp : fsubrBody =
   match args with
   | para_exp :: body :: [] ->
      let para_var = exp_to_var para_exp in
-     let fexp = (fun arg_exp env cont tau -> (*evaluators use dynamical binding*)
+     let fexp = (fun arg_exp env cont tau -> (* evaluators use dynamical binding*)
          _eval body (_extend_env [para_var] [_exp_to_val arg_exp] env) cont default_eval tau) in
      let fval = FunVal (ReifiedEval fexp) in
      cont fval tau

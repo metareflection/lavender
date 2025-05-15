@@ -1,21 +1,21 @@
-open Sexplib.Std
+(* open Sexplib.Std *)
 (******************************************************************************)
 (********************* Types & Related Operations *****************************)
 (******************************************************************************)
 
 (********************* Types *****************************)
-type var = string [@@deriving sexp]
+type var = string
 
 type const =
   | NumConst of int
   | StringConst of string
-  | BoolConst of bool [@@deriving sexp]
+  | BoolConst of bool
  
 type exp =
   | ConstExp of const
   | VarExp of var
   | Meta
-  | ListExp of exp list [@@deriving sexp]
+  | ListExp of exp list
 
 
 type value =
@@ -126,7 +126,8 @@ let rec _replace (loc_env : (var * value) list) var value : (var * value) list =
 (* operations on meta continuation *)
 let _top_cont tau =
   match tau with
-  | Tower ((_,cont,_), _) -> cont
+  | [] ->
+  | (_,cont,_) :: _ -> cont
 let _top_env tau =
   match tau with
   | Tower ((env,_,_), _) -> env
@@ -139,11 +140,13 @@ let _meta_pop efun tau : meta_cont =
   | Tower (_,tau') -> tau' efun
 (* we can spawn a new level, then redecide what
    language the current level uses when we come back*)
-let _meta_push env cont efun tau =
+let _meta_push_modify_eval env cont efun tau =
   match tau with
   | Tower ((old_env,old_cont,_), tau') ->
      let new_tau = fun new_f -> Tower ((old_env,old_cont,new_f), tau') in
      Tower ((env,cont,efun), new_tau)
+let _meta_push env cont _ tau =
+  Tower ((env,cont,efun), fun new_f -> tau)
 
 let _terminate_level efun (v : value) tau : value =
   (_top_cont tau) v (_meta_pop efun tau)

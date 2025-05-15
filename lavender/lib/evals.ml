@@ -98,5 +98,13 @@ let rel_eval : eval_func =
   | ConstExp _ ->
   | VarExp var ->
   | ListExp (pred_exp :: args) ->
-     let pred = _eval pred_exp env cont rel_eval tau in
-     
+     let pred_goal_func = _eval pred_exp env cont rel_eval tau in (* can be just env lookup *)
+     let args_goal = _eval args env cont rel_eval tau in (* can be just env lookup *)
+     take 5 (pred_goal args env (* or just top of it *))
+
+let kanren_eq (exp1 : exp) (exp2 : exp) : goal =
+  fun (env, counter) ->
+  let env' = unify (find exp1 env) (find exp2 env) env in
+  match env' with
+  | Some sub -> Stream_Head ((sub,counter),Empty)
+  | None -> Empty
