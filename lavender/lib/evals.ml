@@ -92,19 +92,20 @@ let rec take n s =
      take n (s' ())
 
 (* built in evaluator written in OCaml for convenience and testing *)
-let rel_eval : eval_func =
+let rec rel_eval : eval_func =
   fun exp env cont tau ->
   match exp with
   | ConstExp _ ->
   | VarExp var ->
+  | ListExp ((VarExp "define-relation") :: args) ->
+     let exp' = ListExp (Meta :: (VarExp "define") :: args) in
+     _eval exp' env cont rel_eval tau
   | ListExp (pred_exp :: args) ->
      let pred_goal_func = _eval pred_exp env cont rel_eval tau in (* can be just env lookup *)
      let args_goal = _eval args env cont rel_eval tau in (* can be just env lookup *)
      take 5 (pred_goal args env (* or just top of it *))
 
-let kanren_eq (exp1 : exp) (exp2 : exp) : goal =
-  fun (env, counter) ->
-  let env' = unify (find exp1 env) (find exp2 env) env in
-  match env' with
-  | Some sub -> Stream_Head ((sub,counter),Empty)
-  | None -> Empty
+          (* just embed kanren like in scheme, so core micro kanren is in env. The main use of fexpr is to isolate out the run interface, so that queries are executed directly rather than inside a run; in some sense we just provide a wrapper.
+
+defining new relations is just a normal define expression, but to make it more convenient
+we can put it in the level specific evaluator as a sugar*)

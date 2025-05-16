@@ -1,0 +1,63 @@
+
+(define var
+  (lambda (c) (list c)))
+(define var?
+  (lambda (x) (list? x)))
+(define var=?
+  (lambda (x1 x2) (= (vector-ref x1 0) (vector-ref x2 0))))
+
+(define walk
+  (lambda (u s)
+    (let ((pr (and (var? u) (assp (lambda (v) (var=? u v)) s))))
+      (if pr (walk (cdr pr) s) u))))
+
+(define ext-x
+  (lambda (x v s) `((,x . ,v) . ,s)))
+
+(define mzero '())
+(define unit (lambda (s/c) (cons s/c mzero)))
+
+
+(define unify
+  (lambda (u v s)
+    (let ((u (walk u s)) (v (walk v s)))
+      (cond
+       ((and (var? u) (var? v) (var=? u v)) s)
+       ((var? u) (ext-s u v s))
+       ((var? v) (ext-s v u s))
+       ((and (pair? u) (pair? v))
+	(let ((s (unify (car u) (car v) s)))
+          (and s (unify (cdr u) (cdr v) s))))
+       (else (and (eqv? u v) s))))))
+
+(define call/fresh
+  (lambda (f)
+    (lambda (s/c)
+      (let ((c (cdr s/c)))
+	((f (var c)) `(,(car s/c) . ,(+ c 1)))))))
+
+(define mplus
+  (lambda ($1 $2)
+    (cond
+     ((null? $1) $2)
+     ((procedure? $1) (lambda () (mplus $2 ($1))))
+     (else (cons (car $1) (mplus (cdr $1) $2))))))
+
+(define bind
+  (lambda ($ g)
+    (cond
+     ((null? $) mzero)
+     ((procedure? $) (lambda () (bind ($) g)))
+     (else (mplus (g (car $)) (bind (cdr $) g))))))
+
+(define ==
+  (lambda (u v)
+    (lambda (s/c)
+      (let ((s (unify u v (car s/c))))
+	(if s (unit `(,s . ,(cdr s/c))) mzero)))))
+
+(define disj
+  (lambda (g1 g2) (lambda (s/c) (mplus (g1 s/c) (g2 s/c)))))
+(define conj
+  (lambda (g1 g2) (lambda (s/c) (bind (g1 s/c) g2))))
+
