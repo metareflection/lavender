@@ -1,4 +1,3 @@
-(* open Sexplib.Std *)
 (******************************************************************************)
 (********************* Types & Related Operations *****************************)
 (******************************************************************************)
@@ -20,14 +19,14 @@ type exp =
 
 type value =
   | ConstVal of const
-  | VarVal of var (* logic programming can be supported if vars can appear in env*)
+  | VarVal of var 
   | FunVal of applicable
   | ListVal of value list
   | Error of string * string * value (* location, message, cause *)
 
 (* list of mutable lists, mapping vars to refernces of vals *)
-and local_env = (var * value) list ref
-and env = local_env list
+and glob_env = (var * value) list ref
+and env = glob_env list
 and cont = value -> meta_cont -> value
 and eval_func = exp -> env -> cont -> meta_cont -> value
 and meta_cont = Tower of (env * cont * eval_func) * (eval_func -> meta_cont)
@@ -41,7 +40,7 @@ and subr =
   | BinarySubr of (value -> value -> value)
   | TernarySubr of (value -> value -> value -> value)
 and fsubr = int * fsubrBody
-and delta_reifier = value -> value -> value -> value -> env -> cont -> meta_cont -> value
+and delta_reifier = value -> value -> value -> value -> env -> cont -> eval_func -> meta_cont -> value
 and gamma_reifier = value -> value -> value -> value -> cont -> meta_cont -> value
 
 and applicable =
@@ -99,8 +98,7 @@ let _top_eval tau =
 let _meta_pop efun tau : meta_cont =
   match tau with
   | Tower (_,tau') -> tau' efun
-(* we can spawn a new level, then redecide what
-   language the current level uses when we come back*)
+
 let _meta_push_modify_eval env cont efun tau =
   match tau with
   | Tower ((old_env,old_cont,_), tau') ->
@@ -166,7 +164,7 @@ let _env_down = _val_to_env
 let _cont_down = _val_to_cont
 let _eval_down = _val_to_eval
 
-(* metacontinuation up and down *)
+(* meta continuation up *)
 let rec _mc_to_val (tau : meta_cont) : value =
   let tau_rst_re = fun eval_fun_valst cont tau' ->
     let eval_fun_val = List.hd eval_fun_valst in
@@ -207,7 +205,7 @@ let rec _lookup var env cont tau : value =
      | Some val_found -> cont val_found tau
      | None -> _lookup var env_rst cont tau
 
-let rec default_eval exp env cont tau =
+let rec _default_eval exp env cont tau =
   match exp with
   | VarExp var ->
      _lookup var env cont tau
@@ -215,7 +213,7 @@ let rec default_eval exp env cont tau =
   | Meta -> cont (ConstVal (StringConst "Meta")) tau
   | ListExp [] -> cont (ListVal []) tau
   | ListExp (fun_exp :: args) ->
-     _eval (ListExp (Meta :: fun_exp :: args)) env cont default_eval tau
+     _eval (ListExp (Meta :: fun_exp :: args)) env cont _default_eval tau
 
 and _eval (expr : exp) env cont efun tau : value =
   match expr with
@@ -303,7 +301,7 @@ and _apply_procedure (p : lambdaAbs) args env cont efun tau : value =
 
 (******************* Applying Environment **********************)
 (* this section, except for _apply_environment, is technically not mutually recursive *)
-and _L_lookup_common var env : (value * local_env) option =
+and _L_lookup_common var env : (value * glob_env) option =
   match env with
   | [] -> None (* undefined in scheme implementation *)
   | tbl :: _ ->
@@ -313,7 +311,7 @@ and _L_lookup_common var env : (value * local_env) option =
         tbl := ((var, com_val) :: tbl_val);
         Some (com_val, tbl)
      | None -> None
-and _L_lookup var env : (value * local_env) option =
+and _L_lookup var env : (value * glob_env) option =
   match env with
   | [] -> _L_lookup_common var env
   | tbl :: env_rst ->
@@ -349,11 +347,11 @@ and _R_lookup_then_cont (i : value) (env : env) cont tau place : value =
       | Some val_fetched -> cont val_fetched tau
       | None -> err cont tau place "undefined variable" i)
   | _ -> err cont tau place "not an identifier" i
-and local_env_to_value (loc_env : local_env) : value =
+and glob_env_to_value (loc_env : glob_env) : value =
   let loc_env_content = !loc_env in
   ListVal (List.map (fun (var,value) -> ListVal ((VarVal var) :: [value])) loc_env_content)
 and env_to_value env : value =
-  ListVal (List.map local_env_to_value env)
+  ListVal (List.map glob_env_to_value env)
 and _apply_environment (f : env) args env cont efun tau : value =
   match args with
   | [] -> cont (env_to_value f) tau
@@ -392,25 +390,32 @@ and _apply_delta (d : delta_reifier) args env cont efun tau =
   match args with
   | [] ->
      d (ListVal []) (_env_up env) (_cont_up cont)
-       (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop default_eval tau)
+       (_eval_up efun) (_top_env tau) (_top_cont tau) (_top_eval tau)
+       (_meta_pop _default_eval tau)
   | lang :: args_rst ->
-     match _eval lang env cont efun tau with
-     | FunVal (ReifiedEval lang_eval) ->
-        d (ListVal (_exp_up_star args_rst)) (_env_up env) (_cont_up cont)
-          (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop lang_eval tau)
-     | _ ->
-        d (ListVal (_exp_up_star args)) (_env_up env) (_cont_up cont)
-          (_eval_up efun) (_top_env tau) (_top_cont tau) (_meta_pop default_eval tau)
+     let cont' = fun lang_eval_val tau ->
+       match lang_eval_val with
+       | FunVal (ReifiedEval lang_eval) ->
+          d (ListVal (_exp_up_star args_rst)) (_env_up env) (_cont_up cont)
+            (_eval_up efun) (_top_env tau) (_top_cont tau) (_top_eval tau)
+            (_meta_pop lang_eval tau)
+       | _ ->
+          d (ListVal (_exp_up_star args)) (_env_up env) (_cont_up cont)
+            (_eval_up efun) (_top_env tau) (_top_cont tau) (_top_eval tau)
+            (_meta_pop _default_eval tau) in
+     _eval lang env cont' efun tau
 and _apply_gamma (g : gamma_reifier) args env cont efun tau =
   match args with
   | [] ->
      g (ListVal []) (_env_up env) (_cont_up cont)
-       (_eval_up efun) (_top_cont tau) (_meta_pop default_eval tau)
+       (_eval_up efun) (_top_cont tau) (_meta_pop _default_eval tau)
   | lang :: args_rst ->
-     match _eval lang env cont efun tau with
-     | FunVal (ReifiedEval lang_eval) ->
-        g (ListVal (_exp_up_star args_rst)) (_env_up env) (_cont_up cont)
-          (_eval_up efun) (_top_cont tau) (_meta_pop lang_eval tau)
-     | _ ->
-        g (ListVal (_exp_up_star args)) (_env_up env) (_cont_up cont)
-          (_eval_up efun) (_top_cont tau) (_meta_pop default_eval tau)
+     let cont' = fun lang_eval_val tau ->
+       match lang_eval_val with
+       | FunVal (ReifiedEval lang_eval) ->
+          g (ListVal (_exp_up_star args_rst)) (_env_up env) (_cont_up cont)
+            (_eval_up efun) (_top_cont tau) (_meta_pop lang_eval tau)
+       | _ ->
+          g (ListVal (_exp_up_star args)) (_env_up env) (_cont_up cont)
+            (_eval_up efun) (_top_cont tau) (_meta_pop _default_eval tau) in
+     _eval lang env cont' efun tau

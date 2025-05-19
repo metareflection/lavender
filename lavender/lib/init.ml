@@ -24,7 +24,7 @@ let make_init_env =
 
 
 let make_init_eval =
-  fun () -> default_eval
+  fun () -> _default_eval
 let rec sexp_to_exp (se : Core.Sexp.t) : exp =
   match se with
   | Atom "#t" ->
@@ -67,17 +67,10 @@ let lavender_banner =
 (***************** Built in Special Forms of Lavender in Common Environment ***************)
 (***************************************************************************************)
 
-(*
-  Meaning spawns a new level, and result of new level goes back to old level, using old level's
-  semantics without changing it. 
-
-  We can later define a different reflector that does change the evaluator when it comes back
-*)
 let _check_cont_spawn (exp_rfl : exp) (env_rfl : env)
       (cont_rfl : applicable) (eval_rfl : eval_func) env cont (efun : eval_func) tau : value =
   match cont_rfl with
   | Subr (UnarySubr func) ->
-     (* back to old eval when new level terminates *)
      let cont' = (fun a tau -> _terminate_level efun (func a) tau) in 
      _eval exp_rfl env_rfl cont' eval_rfl (_meta_push env cont efun tau)
   | FSubr (1,func) ->
@@ -98,7 +91,7 @@ let _check_cont_spawn (exp_rfl : exp) (env_rfl : env)
   | Delta d ->
      d (_exp_up exp_rfl) (_env_up env_rfl)
        (_cont_up (_terminate_level efun))
-       (_eval_up eval_rfl) env cont tau
+       (_eval_up eval_rfl) env cont efun tau
   | Gamma g ->
      g (_exp_up exp_rfl) (_env_up env_rfl)
        (_cont_up (_terminate_level efun))
@@ -157,12 +150,12 @@ let _lambda : fsubrBody =
   | (ListExp paras) :: body :: [] ->
      let para_vars = List.map exp_to_var paras in
      let bd = (fun val_lst cont tau ->
-         _eval body (_extend_env para_vars val_lst env) cont default_eval tau) in
+         _eval body (_extend_env para_vars val_lst env) cont _default_eval tau) in
      let lbd = FunVal (Abs (List.length paras,bd)) in
      cont lbd tau
   | _ -> undef cont tau "_lambda"
 
-let _fexp : fsubrBody =
+let _efun : fsubrBody =
   fun args env cont _ tau ->
   match args with
   | (ListExp (para_exp :: para_env :: [para_cont])) :: body :: [] ->
@@ -171,27 +164,27 @@ let _fexp : fsubrBody =
      let fexp = (fun arg_exp env' cont' tau' -> 
          let fargs = (_exp_to_val arg_exp) :: (_env_to_val env')
                      :: (_cont_to_val cont') :: [_mc_to_val tau'] in
-         _eval body (_extend_env para_vars fargs env) (fun x _ -> x) default_eval tau) in
+         _eval body (_extend_env para_vars fargs env) (fun x _ -> x) _default_eval tau) in
      let fval = FunVal (ReifiedEval fexp) in
      cont fval tau
   | _ -> undef cont tau "_fexp"
 let _delta : fsubrBody =
-  fun args _ cont efun tau ->
+  fun args _ cont _ tau ->
   match args with
   | (ListExp (para_exp :: para_env :: para_cont :: [para_eval])) :: body :: [] ->
      let paras = para_exp :: para_env :: para_cont :: [para_eval] in
      let para_vars = List.map exp_to_var paras in
-     let d = (fun val_exp val_env val_cont val_eval env' cont' tau ->
+     let d = (fun val_exp val_env val_cont val_eval env' cont' efun' tau ->
          _eval body (_extend_env para_vars
                        (val_exp :: val_env :: val_cont :: [val_eval])
-                       env') cont' efun tau) in
+                       env') cont' efun' tau) in
      let dt = FunVal (Delta d) in
      cont dt tau
   | arg :: _ ->
      err cont tau "_delta" "wrong para shape" (_exp_to_val arg)
   | _ -> undef cont tau "_delta"
 let _gamma : fsubrBody =
-  fun args _ cont efun stau ->
+  fun args _ cont _ stau ->
   match args with
   | (ListExp (para_exp :: para_env :: para_cont :: [para_eval])) :: body :: [] ->
      let paras = para_exp :: para_env :: para_cont :: [para_eval] in
@@ -199,12 +192,12 @@ let _gamma : fsubrBody =
      let g = (fun val_exp val_env val_cont val_eval cont' tau ->
          _eval body (_extend_env para_vars
                        (val_exp :: val_env :: val_cont :: [val_eval])
-                       (_top_env stau)) cont' efun tau) in
+                       (_top_env stau)) cont' (_top_eval stau) tau) in
      let gm = FunVal (Gamma g) in
      cont gm stau
   | arg :: _ -> err cont stau "_gamma" "wrong para shape" (_exp_to_val arg)
   | _ -> undef cont stau "_gamma"
-let _update_env (var : var) (value : value) (env : local_env) =
+let _update_env (var : var) (value : value) (env : glob_env) =
   let tbl = !env in
   let new_tbl = 
     match _find_opt tbl var with
@@ -411,25 +404,38 @@ let _show_const c : string =
   | StringConst str -> str
   | BoolConst true -> "true"
   | BoolConst false -> "false"
+let _show_fun f : string =
+  match f with
+  | Abs (n,_) -> "A Lambda of Arity " ^ (string_of_int n)
+  | Subr (ThunkSubr _) -> "A Nullary Subroutine"
+  | Subr (UnarySubr _) -> "A Unary Subroutine"
+  | Subr (BinarySubr _) -> "A Binary Subroutine"
+  | Subr (TernarySubr _) -> "A Ternary Subroutine"
+  | FSubr (n,_) -> "An F-Subroutine of Arity " ^ (string_of_int n)
+  | ReifiedEnv _ -> "A Reified Environment"
+  | ReifiedCont _ -> "A Reified Continuation"
+  | ReifiedEval _ -> "A Reified Evaluator"
+  | Delta _ -> "A Delta Reifier"
+  | Gamma _ -> "A Gamma Reifier"
 let rec _show_value value : string =
   match value with
   | ConstVal c -> _show_const c
   | VarVal var -> var ^ ""
-  | FunVal _ -> "An Applicable"
+  | FunVal f -> _show_fun f
   | ListVal vlst ->
      let str_lst = List.map _show_value vlst in
      "[" ^ (String.concat ", " str_lst) ^ "]"
   | Error (str1, str2, v) ->
      "Lavender Error: " ^ str1 ^ " " ^ str2 ^ " Cause: (" ^ (_show_value v) ^ ")"
 let next_iter iteration = 1 + iteration
-let _print (level : int) (iteration : int) (value : value) =
-  print_int level;
+let _print (level : value) (iteration : int) (value : value) =
+  print_string (_show_value level);
   print_string "-";
   print_int iteration;
   print_string ":";
   print_string (_show_value value);
   print_newline ();
-  print_int level;
+  print_string (_show_value level);
   print_string "-";
   print_int (next_iter iteration);
   print_string ">"
@@ -451,29 +457,26 @@ let _openloop : fsubrBody =
   match args with
   | arg1 :: [] ->
      let cont' = (fun new_level tau ->
-         match new_level with
-         | ConstVal (NumConst n) ->
-            _gen_metalevel n (make_init_env ()) (make_init_eval ()) env cont efun tau
-         | _ -> undef cont tau "_openloop") in
+         _gen_metalevel new_level (make_init_env ()) (make_init_eval ()) env cont efun tau) in
      _eval arg1 env cont' efun tau
   | arg1 :: arg2 :: [] ->
      let cont'' = (fun new_lv new_env_val tau ->
-         match new_lv, new_env_val with
-         | ConstVal (NumConst n), FunVal (ReifiedEnv new_env) ->
-            _gen_metalevel n new_env (make_init_eval ()) env cont efun tau
+         match new_env_val with
+         | FunVal (ReifiedEnv new_env) ->
+            _gen_metalevel new_lv new_env (make_init_eval ()) env cont efun tau
          | _ ->
             err cont tau "_openloop" "not a reified environment" new_env_val) in
      let cont' = (fun new_lv tau -> _eval arg2 env (cont'' new_lv) efun tau) in
      _eval arg1 env cont' efun  tau
   | arg1 :: arg2 :: arg3 :: [] ->
      let cont''' = (fun new_lv new_env_val new_eval_val tau ->
-         match new_lv, new_env_val, new_eval_val with
-         | ConstVal (NumConst n),
-           FunVal (ReifiedEnv new_env),
+         match new_env_val, new_eval_val with
+         | FunVal (ReifiedEnv new_env),
            FunVal (ReifiedEval new_eval) ->
-            _gen_metalevel n new_env new_eval env cont efun tau
+            _gen_metalevel new_lv new_env new_eval env cont efun tau
          | _ ->
-            err cont tau "_openloop" "not a reified environment" new_env_val) in
+            err cont tau "_openloop" "not a pair of reified environment and evaluator"
+              (ListVal (new_env_val :: [new_eval_val]))) in
      let cont'' = (fun new_lv new_env_val tau ->
          _eval arg3 env (cont''' new_lv new_env_val) efun tau) in
      let cont' = (fun new_lv tau -> _eval arg2 env (cont'' new_lv) efun tau) in
@@ -615,17 +618,14 @@ let _reify_new_cont : fsubrBody =
   match args with
   | arg1 :: [] ->
      let cont' = (fun level tau ->
-         match level with
-         | ConstVal (NumConst lv) ->
-            let new_cont = _gen_toplv_cont lv (make_init_env ()) (make_init_eval ()) in
-            cont (_cont_up new_cont) tau
-         | _ -> undef cont tau "_reify_new_cont") in
+         let new_cont = _gen_toplv_cont level (make_init_env ()) (make_init_eval ()) in
+         cont (_cont_up new_cont) tau) in
      _eval arg1 env cont' efun tau
   | arg1 :: arg2 :: [] ->
      let cont'' = (fun level env_re tau ->
-         match level, env_re with
-         | ConstVal (NumConst lv), FunVal (ReifiedEnv env_r) ->
-            cont (_cont_up (_gen_toplv_cont lv env_r (make_init_eval ()))) tau
+         match env_re with
+         | FunVal (ReifiedEnv env_r) ->
+            cont (_cont_up (_gen_toplv_cont level env_r (make_init_eval ()))) tau
          | _ -> err cont tau "_reify_new_cont"
                   "not a reified environment"
                   env_re) in
@@ -634,9 +634,9 @@ let _reify_new_cont : fsubrBody =
      _eval arg1 env cont' efun tau
   | arg1 :: arg2 :: arg3 :: [] ->
      let cont'' = (fun level env_re eval_re tau ->
-         match level, env_re, eval_re with
-         | ConstVal (NumConst lv), FunVal (ReifiedEnv env_r), FunVal (ReifiedEval eval_r) ->
-            cont (_cont_up (_gen_toplv_cont lv env_r eval_r)) tau
+         match env_re, eval_re with
+         | FunVal (ReifiedEnv env_r), FunVal (ReifiedEval eval_r) ->
+            cont (_cont_up (_gen_toplv_cont level env_r eval_r)) tau
          | _ -> err cont tau "_reify_new_cont"
                   "not a reified environment"
                   env_re) in
@@ -695,6 +695,7 @@ let fsubr_table_2_h =
   [_lambda;
    _delta;
    _gamma;
+   _efun;
    _meaning;
    _common_define;
    _define;
@@ -951,7 +952,7 @@ let table_common_fsubr_ids =
     "quote";
     (* binary *)
     "lambda";
-    "delta"; "gamma"; "meaning";
+    "delta"; "gamma"; "efun"; "meaning";
     "common-define"; "define";
     "set!";
     
@@ -969,5 +970,5 @@ let table_common_values =
   List.map (fun x -> FunVal x) (List.append subr_table fsubr_table)
 
 let table_common_initial =
-  zip_lst table_common_ids table_common_values
+  ("default-eval", FunVal (ReifiedEval _default_eval)) :: (zip_lst table_common_ids table_common_values)
 

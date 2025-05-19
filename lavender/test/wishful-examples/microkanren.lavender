@@ -81,41 +81,35 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; User Interface ;;;;;;;;;;;;;;;;;;;;;;;;
-(define empty-state (cons () 0))
+(common-define empty-state (cons () 0))
 
-(define (call/goal g) (g empty-state))
+(common-define call/goal
+  (lambda (g) (g empty-state)))
 
-(define (pull $)
-  (if (procedure? $) (pull ($)) $))
+(common-define pull
+  (lambda ($)
+    (if (procedure? $) (pull ($)) $)))
 
-(define (take-all $)
-  (let (($ (pull $)))
-    (if (null? $) '() (cons (car $) (take-all (cdr $))))))
+(common-define take-all
+ (lambda ($)
+   (let (($ (pull $)))
+     (if (null? $) '() (cons (car $) (take-all (cdr $)))))))
 
-(define (take n $)
-  (if (zero? n) '()
-    (let (($ (pull $)))
-      (if (null? $) '() (cons (car $) (take (- n 1) (cdr $)))))))
+(common-define take
+  (lambda (n $)
+    (if (zero? n) '()
+	(let (($ (pull $)))
+	  (if (null? $) '() (cons (car $) (take (- n 1) (cdr $))))))))
 
 (common-define rel_eval
-  (fexpr (exp env cont tau)
+  (efun (exp env cont tau)
     (cond
-     (var? exp)
-     (pair? exp)
-     (else )
-     )
-     match exp with
-  | ListExp ((VarExp "define-relation") :: name :: body) ->
-     if is_query body
-     then
-       let exp' = ListExp (Meta :: (VarExp "define") :: name :: body) in
-       _eval exp' env cont rel_eval tau
-     else err cont tau "_rel_eval" "not a relation to define" (_exp_to_val exp)  
-  | ListExp _ ->
-     let val_of_exp = _eval exp env cont default_eval tau in
-     if is_query val_of_exp
-     then val_of_exp (*run 5 (genfresh "x") val_of_exp*)
-     else err cont tau "_rel_eval" "invalid logical expression" (_exp_to_val exp)
-  | ConstExp _ -> cont (ListVal []) tau
-  | VarExp _ -> cont (ListVal [ConstVal (NumConst 0)]) tau
-  | _ -> err cont tau "_rel_eval" "invalid logical expression" (_exp_to_val exp)
+     ((var? exp) (cont exp tau))
+     ((and (pair? exp) (= (car exp) 'define-relation))
+      (if #t
+	  (let ((exp' (cons 'meta (cons 'define (cdr exp)))))
+	    (eval exp' env cont rel_eval tau))
+	  (cont (list 'wrong) tau)))
+     ((pair? exp)
+      (let ((val (eval exp env cont default_eval tau))) (take 5 val)))
+     (else (cont () tau)))))
