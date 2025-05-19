@@ -1,0 +1,42 @@
+
+;; basic going up for error handling?
+0-0> 1
+1
+0-1> foo
+Error, loading metalevel
+1-0>
+
+;; ex (in demo, explained what e r k f are, have a cheatsheet for reflective towers concept)
+0-0> (delta (e r k f) f)
+A Reified Evaluator
+1-0> ;; how do we go back?
+
+;; ex maybe?
+0-0> (delta (e r k f) (f 42 r k))
+42
+0-1>
+
+;; strawman pseudocode for the heterogenous example
+0-0> (delta (e r k) ;; should use r
+        (let ((f (eval-strict (car e)))
+              (args (map eval-lazy (cdr e))))
+         (k (apply f args))))
+;; TODO: figure out the real interface for this
+
+;; maybe not interesting, because
+;; just two different reflectors used compositionally
+;; vs
+;; interacting with a tower
+;; maybe still tower in r & k
+
+;; lazy stream cons vs eager cons
+;; lazy eval vs call by value
+;; lexical scope vs dynamic scope
+
+;; motivating examples
+;; miniKanren with an implicit interface
+;; how? many ways, like special reification vars, or like a Prolog REPL?
+
+;; for example
+(+ (== x 1) (conde ((== x 2)) ((== x 4))))
+3 and 5
