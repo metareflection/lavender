@@ -40,3 +40,7 @@ A Reified Evaluator
 ;; for example
 (+ (== x 1) (conde ((== x 2)) ((== x 4))))
 3 and 5
+
+;; the two questions:
+;; when is it compelling to mix multiple reflectors?
+;; when is it compelling to have a tower interact with that?
