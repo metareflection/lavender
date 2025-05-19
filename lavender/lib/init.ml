@@ -33,10 +33,9 @@ let rec sexp_to_exp (se : Core.Sexp.t) : exp =
      ConstExp (BoolConst false)
   | Atom str ->
      let len = String.length str in
-     if (len >= 2) && ('\"' = str.[0]) && ('\"' = str.[len - 1])
-                                         (* Str.string_match (Str.regexp "\"(\\.|[^\"])*\"") str 0*)
+     if (len >= 2) && ('\'' = str.[0]) 
      then
-       ConstExp (StringConst (String.sub str 1 (len - 2)))
+       ConstExp (StringConst (String.sub str 1 (len - 1)))
      else
        if Str.string_match (Str.regexp "-?[0-9]+$") str 0
        then ConstExp (NumConst (int_of_string str))
@@ -45,12 +44,12 @@ let rec sexp_to_exp (se : Core.Sexp.t) : exp =
      ListExp (List.map sexp_to_exp se_lst)
 let parse (s : string) : exp =
   sexp_to_exp (Core.Sexp.of_string s)
-
     (*try
     
   with
   | Of_sexp_error ->
-     ConstExp (StringConst ("The String: \n" ^ s ^ "\n Cannot Be Parsed")) *)
+     ConstExp (StringConst ("The String: \n" ^ s ^ "\n Cannot Be Parsed"))
+     *)  
 (*let parse (s : string) : exp =
   try    
     let lexbuf = Lexing.from_string s in
@@ -171,8 +170,8 @@ let _fexp : fsubrBody =
      let para_vars = List.map exp_to_var paras in
      let fexp = (fun arg_exp env' cont' tau' -> 
          let fargs = (_exp_to_val arg_exp) :: (_env_to_val env')
-                     :: [_cont_to_val cont'] in
-         _eval body (_extend_env para_vars fargs env) (fun x -> x) default_eval tau) in
+                     :: (_cont_to_val cont') :: [_mc_to_val tau'] in
+         _eval body (_extend_env para_vars fargs env) (fun x _ -> x) default_eval tau) in
      let fval = FunVal (ReifiedEval fexp) in
      cont fval tau
   | _ -> undef cont tau "_fexp"

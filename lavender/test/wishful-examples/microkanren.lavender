@@ -1,63 +1,121 @@
+;;;;;;;;;;;;;;; Core ;;;;;;;;;;;;;;;;;;;;;;;
+(common-define var
+  (lambda (c) (list "var" c)))
+(common-define var?
+  (lambda (x) (and (list? x) (= (car x) "var"))))
+(common-define var=?
+  (lambda (x1 x2) (= (cadr x1) (cadr x2))))
 
-(define var
-  (lambda (c) (list c)))
-(define var?
-  (lambda (x) (list? x)))
-(define var=?
-  (lambda (x1 x2) (= (vector-ref x1 0) (vector-ref x2 0))))
+(common-define walk
+  (lambda (expr sub)
+    (let ((val-of-var (and (var? expr) (find_opt expr sub)))) ;(lambda (v) (var=? expr v)) sub
+      (if val-of-var (walk val-of-var sub) expr))))
 
-(define walk
-  (lambda (u s)
-    (let ((pr (and (var? u) (assp (lambda (v) (var=? u v)) s))))
-      (if pr (walk (cdr pr) s) u))))
+(common-define occurs ; github code doesn't contain occurs check
+  (lambda (var exp sub)
+    (cond
+     ((var? exp) (var=? var exp))
+     ((pair? exp)
+      (if (occurs var (walk (car exp) sub) sub)
+	  #t
+	  (occurs var (cdr exp) sub)))
+     (else #f))))
 
-(define ext-x
-  (lambda (x v s) `((,x . ,v) . ,s)))
+(common-define sub-update
+  (lambda (var exp sub)
+    (if (occurs var exp sub)
+	sub
+	(cons (cons var exp) sub))))
 
-(define mzero '())
-(define unit (lambda (s/c) (cons s/c mzero)))
+(common-define mzero '())
+(common-define unit (lambda (s/c) (cons s/c mzero)))
 
 
-(define unify
-  (lambda (u v s)
-    (let ((u (walk u s)) (v (walk v s)))
+(common-define unify
+  (lambda (exp1 exp2 sub)
+    (let ((exp1 (walk exp1 sub)) (exp2 (walk exp2 sub)))
       (cond
-       ((and (var? u) (var? v) (var=? u v)) s)
-       ((var? u) (ext-s u v s))
-       ((var? v) (ext-s v u s))
-       ((and (pair? u) (pair? v))
-	(let ((s (unify (car u) (car v) s)))
-          (and s (unify (cdr u) (cdr v) s))))
-       (else (and (eqv? u v) s))))))
+       ((and (var? exp1) (var? exp2) (var=? exp1 exp2)) sub)
+       ((var? exp1) (sub-update exp1 exp2 sub))
+       ((var? exp2) (sub-update exp2 exp1 sub))
+       ((and (pair? exp1) (pair? exp2))
+	(let ((sub' (unify (car exp1) (car exp2) sub)))
+          (and sub' (unify (cdr exp1) (cdr exp2) sub'))))
+       (else (and (eqv? exp1 exp2) sub))))))
 
-(define call/fresh
+(common-define call/fresh
   (lambda (f)
     (lambda (s/c)
       (let ((c (cdr s/c)))
-	((f (var c)) `(,(car s/c) . ,(+ c 1)))))))
+	((f (var c)) (cons (car s/c) (+ c 1)))))))
 
-(define mplus
+
+
+
+(common-define stream-app
   (lambda ($1 $2)
     (cond
      ((null? $1) $2)
-     ((procedure? $1) (lambda () (mplus $2 ($1))))
-     (else (cons (car $1) (mplus (cdr $1) $2))))))
+     ((procedure? $1) (lambda () (stream-app $2 ($1))))
+     (else (cons (car $1) (stream-app (cdr $1) $2))))))
 
-(define bind
+(common-define bind
   (lambda ($ g)
     (cond
      ((null? $) mzero)
      ((procedure? $) (lambda () (bind ($) g)))
-     (else (mplus (g (car $)) (bind (cdr $) g))))))
+     (else (stream-app (g (car $)) (bind (cdr $) g))))))
 
-(define ==
-  (lambda (u v)
+(common-define ==
+  (lambda (exp1 exp2)
     (lambda (s/c)
-      (let ((s (unify u v (car s/c))))
-	(if s (unit `(,s . ,(cdr s/c))) mzero)))))
+      (let ((sub (unify exp1 exp2 (car s/c))))
+	(if sub
+	    (unit (cons sub (cdr s/c)))
+	    mzero)))))
 
-(define disj
-  (lambda (g1 g2) (lambda (s/c) (mplus (g1 s/c) (g2 s/c)))))
-(define conj
+(common-define disj
+  (lambda (g1 g2) (lambda (s/c) (stream-app (g1 s/c) (g2 s/c)))))
+(common-define conj
   (lambda (g1 g2) (lambda (s/c) (bind (g1 s/c) g2))))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;; User Interface ;;;;;;;;;;;;;;;;;;;;;;;;
+(define empty-state (cons () 0))
+
+(define (call/goal g) (g empty-state))
+
+(define (pull $)
+  (if (procedure? $) (pull ($)) $))
+
+(define (take-all $)
+  (let (($ (pull $)))
+    (if (null? $) '() (cons (car $) (take-all (cdr $))))))
+
+(define (take n $)
+  (if (zero? n) '()
+    (let (($ (pull $)))
+      (if (null? $) '() (cons (car $) (take (- n 1) (cdr $)))))))
+
+(common-define rel_eval
+  (fexpr (exp env cont tau)
+    (cond
+     (var? exp)
+     (pair? exp)
+     (else )
+     )
+     match exp with
+  | ListExp ((VarExp "define-relation") :: name :: body) ->
+     if is_query body
+     then
+       let exp' = ListExp (Meta :: (VarExp "define") :: name :: body) in
+       _eval exp' env cont rel_eval tau
+     else err cont tau "_rel_eval" "not a relation to define" (_exp_to_val exp)  
+  | ListExp _ ->
+     let val_of_exp = _eval exp env cont default_eval tau in
+     if is_query val_of_exp
+     then val_of_exp (*run 5 (genfresh "x") val_of_exp*)
+     else err cont tau "_rel_eval" "invalid logical expression" (_exp_to_val exp)
+  | ConstExp _ -> cont (ListVal []) tau
+  | VarExp _ -> cont (ListVal [ConstVal (NumConst 0)]) tau
+  | _ -> err cont tau "_rel_eval" "invalid logical expression" (_exp_to_val exp)

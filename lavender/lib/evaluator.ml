@@ -56,57 +56,19 @@ and applicable =
 
 
 (********************* Operations on These Types *****************************)
-(* Adding element to a list val *)
-let cons_list_val v vlst =
-  match vlst with
-  | ListVal lst -> ListVal (v :: lst)
-  | _ -> vlst
 
-(* Up and Down Levels *)
-let rec _exp_to_val_star (elst : exp list) : value list =
-  List.map _exp_to_val elst
-and _exp_to_val (e : exp) : value =
-  match e with
-  | ConstExp c -> ConstVal c
-  | VarExp var -> VarVal var
-  | Meta -> ConstVal (StringConst "Meta")
-  | ListExp elst -> ListVal (_exp_to_val_star elst)
-let _env_to_val (env : env) : value = FunVal (ReifiedEnv env) 
-let _cont_to_val (cont : cont) : value = FunVal (ReifiedCont cont)
-let _eval_to_val (efun : eval_func) : value = FunVal (ReifiedEval efun)
+(* Errors *)
+let error location message value =
+  Error (location, message, value)
+let err (cont : cont) tau location message value =
+  cont (error location message value) tau
+(* Undefined Behaviour *)
+let undef_err location = error location "Undefined in Scheme Implementation" (ListVal [])
+let undef cont tau location =
+  err cont tau location "Undefined in Scheme Implementation" (ListVal [])
+let undef_impossible cont tau location =
+  err cont tau location "Impossible to Reach This Place" (ListVal [])
 
-let _exp_up = _exp_to_val
-let _exp_up_star = _exp_to_val_star
-let _env_up = _env_to_val
-let _cont_up = _cont_to_val
-let _eval_up = _eval_to_val
-
-let rec _val_to_exp_star (vlst : value list) : exp list =
-  List.map _val_to_exp vlst
-and _val_to_exp v : exp =
-  match v with
-  | ConstVal c -> ConstExp c
-  | VarVal var -> VarExp var
-  | ListVal vlst -> ListExp (_val_to_exp_star vlst)
-  | _ -> ListExp []
-let _val_to_env v : env =
-  match v with
-  | FunVal (ReifiedEnv env) -> env
-  | _ -> []
-let _val_to_cont v : cont =
-  match v with
-  | FunVal (ReifiedCont cont) -> cont
-  | _ -> (fun x _ -> x)
-let _val_to_eval v : eval_func =
-  match v with
-  | FunVal (ReifiedEval efun) -> efun
-  | _ -> (fun e _ _ _ -> _exp_to_val e)
-
-let _exp_down = _val_to_exp
-let _exp_down_star = _val_to_exp_star
-let _env_down = _val_to_env
-let _cont_down = _val_to_cont
-let _eval_down = _val_to_eval
 
 (* Operations on environment *)
 let rec _find_opt (loc_env : (var * value) list) var : value option =
@@ -151,18 +113,78 @@ let _terminate_level efun (v : value) tau : value =
   (_top_cont tau) v (_meta_pop efun tau)
 
 
-(* Errors *)
-let error location message value =
-  Error (location, message, value)
-let err (cont : cont) tau location message value =
-  cont (error location message value) tau
-(* Undefined Behaviour *)
-let undef_err location = error location "Undefined in Scheme Implementation" (ListVal [])
-let undef cont tau location =
-  err cont tau location "Undefined in Scheme Implementation" (ListVal [])
-let undef_impossible cont tau location =
-  err cont tau location "Impossible to Reach This Place" (ListVal [])
+(* Adding element to a list val *)
+let cons_list_val v vlst =
+  match vlst with
+  | ListVal lst -> ListVal (v :: lst)
+  | _ -> vlst
 
+(* Up and Down Levels *)
+let rec _exp_to_val_star (elst : exp list) : value list =
+  List.map _exp_to_val elst
+and _exp_to_val (e : exp) : value =
+  match e with
+  | ConstExp c -> ConstVal c
+  | VarExp var -> VarVal var
+  | Meta -> ConstVal (StringConst "Meta")
+  | ListExp elst -> ListVal (_exp_to_val_star elst)
+let _env_to_val (env : env) : value = FunVal (ReifiedEnv env) 
+let _cont_to_val (cont : cont) : value = FunVal (ReifiedCont cont)
+let _eval_to_val (efun : eval_func) : value = FunVal (ReifiedEval efun)
+
+
+let _exp_up = _exp_to_val
+let _exp_up_star = _exp_to_val_star
+let _env_up = _env_to_val
+let _cont_up = _cont_to_val
+let _eval_up = _eval_to_val
+
+let rec _val_to_exp_star (vlst : value list) : exp list =
+  List.map _val_to_exp vlst
+and _val_to_exp v : exp =
+  match v with
+  | ConstVal c -> ConstExp c
+  | VarVal var -> VarExp var
+  | ListVal vlst -> ListExp (_val_to_exp_star vlst)
+  | _ -> ListExp []
+let _val_to_env v : env =
+  match v with
+  | FunVal (ReifiedEnv env) -> env
+  | _ -> []
+let _val_to_cont v : cont =
+  match v with
+  | FunVal (ReifiedCont cont) -> cont
+  | _ -> (fun x _ -> x)
+let _val_to_eval v : eval_func =
+  match v with
+  | FunVal (ReifiedEval efun) -> efun
+  | _ -> (fun e _ _ _ -> _exp_to_val e)
+
+let _exp_down = _val_to_exp
+let _exp_down_star = _val_to_exp_star
+let _env_down = _val_to_env
+let _cont_down = _val_to_cont
+let _eval_down = _val_to_eval
+
+(* metacontinuation up and down *)
+let rec _mc_to_val (tau : meta_cont) : value =
+  let tau_rst_re = fun eval_fun_valst cont tau' ->
+    let eval_fun_val = List.hd eval_fun_valst in
+    cont (_mc_to_val (_meta_pop (_val_to_eval eval_fun_val) tau)) tau' in
+  let tau_re_bd = fun str ->
+    match str with
+    | "env" -> _env_to_val (_top_env tau)
+    | "cont" -> _cont_to_val (_top_cont tau)
+    | "eval" -> _eval_to_val (_top_eval tau)
+    | "rst" ->
+       FunVal (Abs (1, tau_rst_re))
+    | _ -> error "_mc_to_val" "invalid argument for a reified meta-cont"
+             (ConstVal (StringConst str)) in
+  let tau_re = fun x cont tau' ->
+    match x with
+    | [ConstVal (StringConst str)] -> cont (tau_re_bd str) tau'
+    | _ -> err cont tau' "_mc_to_val" "invalid argument for a reified meta-cont" (ListVal x) in
+  FunVal (Abs (1,tau_re))
 
 (*************************** Mutable Values ***************************)
 let table_common = ref []
