@@ -25,26 +25,32 @@ let make_init_env =
 
 let make_init_eval =
   fun () -> default_eval
-let rec sexp_to_exp (se : sexp) : exp =
+let rec sexp_to_exp (se : Core.Sexp.t) : exp =
   match se with
   | Atom "#t" ->
      ConstExp (BoolConst true)
   | Atom "#f" ->
      ConstExp (BoolConst false)
-  | Atom ("'" ^ str) ->
-     ConstExp (StringConst str)
   | Atom str ->
-     if is_number str
-     then ConstExp (NumConst (str_to_number str))
-     else VarExp str
+     let len = String.length str in
+     if (len >= 2) && ('\"' = str.[0]) && ('\"' = str.[len - 1])
+                                         (* Str.string_match (Str.regexp "\"(\\.|[^\"])*\"") str 0*)
+     then
+       ConstExp (StringConst (String.sub str 1 (len - 2)))
+     else
+       if Str.string_match (Str.regexp "-?[0-9]+$") str 0
+       then ConstExp (NumConst (int_of_string str))
+       else VarExp str
   | List se_lst ->
      ListExp (List.map sexp_to_exp se_lst)
 let parse (s : string) : exp =
-  try
-    sexp_to_exp (Core.Sexp.of_string s)    
+  sexp_to_exp (Core.Sexp.of_string s)
+
+    (*try
+    
   with
   | Of_sexp_error ->
-     ConstExp (StringConst ("The String: \n" ^ s ^ "\n Cannot Be Parsed")) 
+     ConstExp (StringConst ("The String: \n" ^ s ^ "\n Cannot Be Parsed")) *)
 (*let parse (s : string) : exp =
   try    
     let lexbuf = Lexing.from_string s in
@@ -147,7 +153,7 @@ let _if : fsubrBody =
   | _ -> undef cont tau "_if"
 (* define functions using default semantics *)
 let _lambda : fsubrBody =
-  fun args env cont efun tau ->
+  fun args env cont _ tau ->
   match args with
   | (ListExp paras) :: body :: [] ->
      let para_vars = List.map exp_to_var paras in
@@ -158,12 +164,15 @@ let _lambda : fsubrBody =
   | _ -> undef cont tau "_lambda"
 
 let _fexp : fsubrBody =
-  fun args env cont efun tau ->
+  fun args env cont _ tau ->
   match args with
-  | para_exp :: body :: [] ->
-     let para_var = exp_to_var para_exp in
-     let fexp = (fun arg_exp env cont tau -> (* evaluators use dynamical binding*)
-         _eval body (_extend_env [para_var] [_exp_to_val arg_exp] env) cont default_eval tau) in
+  | (ListExp (para_exp :: para_env :: [para_cont])) :: body :: [] ->
+     let paras = para_exp :: para_env :: [para_cont] in
+     let para_vars = List.map exp_to_var paras in
+     let fexp = (fun arg_exp env' cont' tau' -> 
+         let fargs = (_exp_to_val arg_exp) :: (_env_to_val env')
+                     :: [_cont_to_val cont'] in
+         _eval body (_extend_env para_vars fargs env) (fun x -> x) default_eval tau) in
      let fval = FunVal (ReifiedEval fexp) in
      cont fval tau
   | _ -> undef cont tau "_fexp"
@@ -370,7 +379,7 @@ let _load_file (file_name : value) : exp list option =
   match file_name with
   | ConstVal (StringConst name) ->
      (try 
-        Some (Core.Sexp.load_sexps_conv_exn name exp_of_sexp)
+        Some (Core.Sexp.load_sexps_conv_exn name sexp_to_exp)
       with Sys_error _ -> None)
   | _ -> None
            

@@ -15,6 +15,3 @@ let lavender =
   let initial_eval = make_init_eval () in
   let cont = _gen_toplv_cont initial_level (make_init_env ()) initial_eval in
   cont lavender_banner (init_meta_cont initial_level initial_eval)
-
-let tst =
-  let inp = parse (

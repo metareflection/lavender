@@ -2,6 +2,7 @@
  (name lavender)
  (preprocess (pps ppx_sexp_conv))
  (libraries 
-   core 
+   core
+   str
    ppx_jane
    ppx_sexp_conv))
