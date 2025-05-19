@@ -1,0 +1,44 @@
+;; go up to meta-meta-level to change the evaluator for metalevel to be an imperative language
+;; then write a polish calculator in the imperative language to redefine user level semantics
+0-0: Lavender
+0-1> (exec-at-metalevel (exec-at-metalevel
+				(begin
+				  (load "imp.lavender")
+				  (set! 'eval imp-eval))))
+0-1: done
+0-2> (exec-at-metalevel ('load "polish.imp" ,
+     			  eval := pol-eval))
+0-2: done
+0-3> (+ - * 9 8 2 4)
+0-3: 74
+;; 9 * 8 = 72, 72 - 2 = 70, 70 + 4 = 74
+0-4> (+ - ('lavender openloop 'f) 2 3 5 6) ;; at any level, a list starting with 'lavender uses default semantics
+     			     ;; so this is equivalent to (openloop 'f) in default lavender evaluator
+f-0: Lavender
+f-1> (exit (lambda (a b) (* a b))) ;; by default, new loop uses default evaluator
+0-4: 7
+;; 2 * 3 = 6, 6 - 5 = 1, 1 + 6 = 7
+0-5>
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; contents of imp.lavender:
+(define imp-eval
+  (lambda (exp env cont tau)
+  ;; just an evaluator for an imperative language written in scheme
+  ))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; contents of polish.imp, an sexp with lots of tags:
+
+('def pol-eval (exp env cont tau) {
+  hd := scheme(car exp) ,
+  'if scheme(arith? hd) 'then result := eval(scheme(hd (cadr exp) (caddr exp)))
+  'else result := exp 'end ,
+  'return scheme(cont result tau)	
+})
+;; note that env isn't used here but we still need it to satisfy the protocol
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+even though syntax of the two expressions above are very different,
+when they are evaluated, they will be evaluted to functions and stored in the environments

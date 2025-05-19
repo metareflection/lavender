@@ -122,8 +122,6 @@ let _meaning : fsubrBody =
      _eval arg1 env cont' efun tau
   | _ -> undef cont tau "_meaning"
 
-
-
 let _quote : fsubrBody =
   fun args _ cont _ tau ->
   match args with
@@ -167,7 +165,7 @@ let _efun : fsubrBody =
          _eval body (_extend_env para_vars fargs env) (fun x _ -> x) _default_eval tau) in
      let fval = FunVal (ReifiedEval fexp) in
      cont fval tau
-  | _ -> undef cont tau "_fexp"
+  | _ -> undef cont tau "_efun"
 let _delta : fsubrBody =
   fun args _ cont _ tau ->
   match args with
