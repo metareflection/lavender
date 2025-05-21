@@ -1,4 +1,21 @@
 
+level 2 and above: default lavender, a scheme like language
+level 1: imp
+level 0: reverse polish
+
+0-4> (4 3 2 9 * - +)
+; (3 - (2 * 9)) + 4 = -11
+0-4: -11
+0-5> (4 3 2 ('lavender (delta (e r k f)
+     	(pol-eval := some-changes 'seq ('lavender meaning e r k pol-eval)))  7 8 9 + + ) ) * - +)
+; some-changes would make all + be treated as *
+; exp in 0-5 would be equivalent to (4 3 2 (7 8 9 * *) * - +), which is
+; (3 - (((8 * 9) * 7) * 2)) + 4 = 3 - (56*9=504) * 2 + 4 = -1001
+0-5: -1001
+
+
+
+
 ;; go up to meta-meta-level to change the evaluator for metalevel to be an imperative language
 ;; then write a polish calculator in the imperative language to redefine user level semantics
 0-0: Lavender
