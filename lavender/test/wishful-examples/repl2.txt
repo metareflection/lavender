@@ -1,9 +1,3 @@
-;; some key differences to demonstrate
-;; when fsubrs are called in a level with a non-default evaluator (via meta keyword)
-;; their semantics are also affected by the evaluator of that level
-
-
-;;;;;;;;;;;;;;;
 
 ;; go up to meta-meta-level to change the evaluator for metalevel to be an imperative language
 ;; then write a polish calculator in the imperative language to redefine user level semantics
