@@ -1194,9 +1194,13 @@
 
 ; Basic lexical environment extension:
 (define _extend_env
-    (lambda (par l env)
-        (cons (cons par l) env)))
-
+  (lambda (par l env)
+    (set! env (cons (cons par l) env)) ; modified from blond
+    env))
+(define _extend_env2
+  (lambda (par l env)
+    (set-car! env (cons (append par (caar env)) (append l (cadr env)))) 
+    env))
 
 
 ; ----- how Blond hangs together ----------------------------------------------
