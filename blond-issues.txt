@@ -68,3 +68,52 @@
 0-3> ((delta (e r k) (meaning e (r 'counter count) k)))
 (_meaning "polluted environment" 99)
 > 
+
+
+;;;;;;;;;;;;;;;;;; Comparison and Differences with Black's Delta ;;;;;;;;;;;;;;;;;;;;;;
+; In Black, continuation application is pushy, thus applying a continuation would not
+; discard current level.
+; However, unlike Blond, definitions done inside a delta are not stored
+;;;
+; If we change the line in apply-delta from extend environment to mutating environment,
+; then delta would work in Black
+
+;e.g.1
+> (load "init.scm") ; modified init file that loads black-with-delta.scm
+New level loaded.
+0-0: start
+0-1> ((delta (e r k) (begin (define count 0) (k count))))
+New level loaded.
+0-1: 0
+0-2> ((delta (e r k) 0))
+1-0: 0
+1-1> count
+New level loaded.
+2-0: (eval-var: unbound variable: count)
+2-1> 
+
+;;;
+;e.g.2
+> (load "init.scm")
+New level loaded.
+0-0: start
+0-1> ((delta (e r k) (begin (define count 0) (k count))))
+New level loaded.
+0-1: 0
+0-2> ((delta (e r k) (k count)))
+New level loaded.
+2-0: (eval-var: unbound variable: count)
+2-1> 
+
+;;;;;
+; e.g.3
+> (load "init.scm")
+New level loaded.
+0-0: start
+0-1> ((delta (e r k) (begin (define count 0) count)))
+New level loaded.
+1-0: 0
+1-1> count
+New level loaded.
+2-0: (eval-var: unbound variable: count)
+2-1> 
