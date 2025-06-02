@@ -40,19 +40,34 @@
 ; Gamma-Reifier = Val x Val x Val x Val x Cont x MC -> Ans
 
 ; ----- the core --------------------------------------------------------------
-; A Blond expression is either a constant (that are left as they are),
+; A default Lavender expression is either a constant (that are left as they are),
 ; an identifier (that is looked up) or a pair (that represents a redexe).
 
-; Expr * Env * Cont * Applicable * Meta-Cont -> Val
+;;(load "lavender.scm")
+;;(lavender)
+;;((delta (e r k f) (meaning e r k (lambda (x) (+ x 1)))) 4)
+
+;;some issues: nested (eval evaluator eval evaluator ...) tags, how to deal with them
+
+;;Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _eval
   (lambda (e r k f tau)
-    (cond
-     ((and (pair? e) (eq? (car e) 'lavender))
-      (_apply _default-eval-f (cdr e) r k f tau))
-     (else
-       (_apply f (list e) r k f tau)))))
+    (display "\n eval entered \n")
+    (display (list 'eval-args e r k f))
+    (display "\n")
+    (let ((f-content (_fetch-eval f)))
+      (cond
+       ((and (pair? e) (eq? (car e) 'lavender))
+	(_apply (_fetch-eval _default-eval-f) (cdr e) r k f tau))
+       (else
+	(case (_fetch-ftype f-content)
+	  ((subr lambda-abstraction environment continuation)
+	   (_apply f-content (list e) r k _default-eval-f tau))
+	  ((fsubr delta-abstraction gamma-abstraction)
+	   (_apply f-content (list e) r k f tau))
+	  (else (_wrong '_eval "not an evaluator" f))))))))
 
-;; Expr * Env * Cont * Applicable * Meta-Cont -> Val
+;; Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 ;; _default-eval is a fsubr, except it only take one arg
 (define _default-eval
   (lambda (e r k f tau)
@@ -99,7 +114,7 @@
 
 ; Applying an applicable object dispatches on its injection tag.
 
-;; Fun * List-of-Expr * Env * Cont * Applicable * Meta-Cont -> Val
+;; Fun * List-of-Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 
 ;; do we need to pass f, or should we use default?
 ;; maybe use default eval in definitions for evaluating current thing, but
@@ -132,7 +147,7 @@
 ; Applying a primitive function dispatches on its arity. There are
 ; currently nullary, unary, binary, and ternary primitive functions.
 
-; Subr * List-of-Expr * Env * Cont * Applicable * Meta-Cont -> Val
+; Subr * List-of-Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _apply_subr
     (lambda (f l r k ef tau)
         (if (not (= (length l) (_fetch-arity f)))
@@ -179,7 +194,7 @@
 
 ; Before reducing a special form, its arity is checked.
 
-; Fsubr * List-of-Expr * Env * Cont * Applicable * Meta-Cont -> Val
+; Fsubr * List-of-Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _apply_fsubr
     (lambda (fv l r k f tau)
         (if (or (= (length l) (_fetch-arity fv))
@@ -192,8 +207,8 @@
 
 ; Lambda-Abstraction * List-of-Expr * Env * Cont * Applicble * Meta-Cont -> Val
 (define _apply_procedure
-    (lambda (p l r k f tau)
-        (if (not (= (length l) (_fetch-arity p)))
+  (lambda (p l r k f tau)
+    (if (not (= (length l) (_fetch-arity p)))
             (_wrong '_apply_procedure "arity mismatch" l)
             (_evlis l r (lambda (lv tau)
                             ((_fetch-value p) lv k tau)) f tau))))
@@ -201,10 +216,10 @@
 
 ; A sequence of expressions is evaluated from left to right:
 
-; List-of-Expr * Env * Cont * Applicable * Meta-Cont -> Val
+; List-of-Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _evlis
-    (lambda (l r k f tau)
-        (if (null? l)
+  (lambda (l r k f tau)
+    (if (null? l)
             (k '() tau)
             (_eval (car l)
                    r
@@ -222,7 +237,7 @@
 ; Applying a reified environment gives access to its representation,
 ; looks up an identifier, or assigns it, according to the number of arguments.
 
-; Reified-Env * List-of-Expr * Env * Cont * Applicable * Meta-Cont -> Val
+; Reified-Env * List-of-Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _apply_environment
     (lambda (f l r k ef tau)
         (case (length l)
@@ -335,12 +350,30 @@
 
 (define _apply_evaluator
   (lambda (ef l r k f tau)
-    (_apply (_eval-down ef) l r k f tau)))
+     (case (length l)
+            ((0) (k (_eval-down-app ef) tau))
+            ((1)
+                (_eval (car l)
+                       r
+                       (lambda (a tau)
+                           (if (_eval-func? a)
+                               (begin (_set-evaluator! (_eval-down ef) a)
+				      (k ef tau))
+                               (_wrong '_apply_evaluator
+                                       "not an evaluator" a)))
+		       f
+                       tau))
+            (else
+             (_wrong '_apply_evaluator "arity mismatch" l)))))
 
+;; f and new f are guarenteed to be evaluators
+(define _set-evaluator!
+  (lambda (f new-f)
+    (set-cdr! f new-f)))
 ; Applying a reifier reifies its arguments, the current environment and
 ; the current continuation:
 
-; Delta-Reifier * List-of-Expr * Env * Cont * Applicable * Meta-Cont -> Val
+; Delta-Reifier * List-of-Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _apply_delta-reifier
     (lambda (d l r k f tau)
         ((_untag d) (_exp-up* l) (_env-up r) (_cont-up k) (_eval-up f)
@@ -373,7 +406,7 @@
     (lambda (k)
         (cons 'continuation k)))
 
-;; Applicable -> Reified-Evaluator
+;; Eval-Func -> Reified-Evaluator
 (define _eval-up
     (lambda (f)
         (cons 'evaluator f)))
@@ -385,7 +418,7 @@
 
 ; Reflecting spawns a new level.
 
-; List-of-Expr * Env * Cont * Applicable * Meta-Cont -> Val
+; List-of-Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _meaning
   (lambda (l r k f tau)
     (_eval (car l)
@@ -410,7 +443,7 @@
 	   f
            tau)))
 
-; Val * Val * Val * Val * Env * Cont * Applicable * Meta-Cont -> Val
+; Val * Val * Val * Val * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _check_and_spawn
     (lambda (a1 a2 a3 a4 r k f tau)
         (cond
@@ -425,7 +458,7 @@
             (else
                 (_spawn (_exp-down a1) (_env-down a2)
                         a3      ; _spawn is going to _cont-down a3
-			a4      ; evaluator will be _eval-down in apply-evaluator
+			(_eval-down a4)
                         r k f tau)))))
 
 ; Expr -> Bool
@@ -490,10 +523,16 @@
 (define _cont-down cdr)
 
 ;; Expr -> Eval-Func
-(define _eval-down cdr)
+(define _eval-down
+  (lambda (f)
+    (case (_fetch-ftype f)
+      ((evaluator) (cdr f))
+      (else (cons 'eval f)))))
+;; eval-down turns reified eval to evaluator, eval-down-app turns it to
+;; a function that can be applied
+(define _eval-down-app cddr)
 
-
-;; Expr * Env * Cont * Applicable * Env * Cont * Applicable * Meta-Cont -> Val
+;; Expr * Env * Cont * Eval-Func * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _spawn
     (lambda (_e _r _k _f r k f tau)
         (case (_fetch-ftype _k)
@@ -508,7 +547,7 @@
                 ((_fetch-value _k)
                      (list _e) _r _terminate-level _f (_meta-push r k f tau)))
             ((lambda-abstraction)
-                (_eval _e
+	        (_eval _e
                        _r
                        (lambda (a tau)
                            ((_fetch-value _k) (list a)
@@ -540,7 +579,7 @@
             ((continuation)
              (_eval _e _r (_cont-down _k) _f (_meta-push r k f tau)))
 	    ((evaluator)
-	     (_spawn _e _r (_eval-down _k) _f r k f tau)))))
+	     (_spawn _e _r (_eval-down-app _k) _f r k f tau)))))
 
 
 
@@ -566,7 +605,7 @@
                     (procedure? (cdr x)))
                  ((environment continuation)
                   (procedure? (cdr x)))
-		 ((evaluator) (_applicable? (cdr x)))
+		 ((evaluator) (_applicable? (_eval-down-app x)))
                  (else
                     #f)))))
 
@@ -625,7 +664,12 @@
 						digamma
                                                 tau)))
                tau))))
+;; evaluate an expression e under a delta d as evaluator, is just
+;; evaluate body of delta under some meta evaluator me, using e in environment
 
+;; this can give some causual connection, since evaluator of level n is defined
+;; in env of level n+1 as a delta, and this delta's behaviour is determined by
+;; level n+2
 (define _inDelta-Abstraction
     (lambda (a)
         (cons 'delta-abstraction a)))
@@ -880,8 +924,10 @@
                        r
                        (lambda (new-level tau)
                            ((_generate_toplevel-continuation
-                                        new-level (make-initial-environment))
-                                blond-banner
+                             new-level
+			     (make-initial-environment)
+			     (make-initial-evaluator))
+                                lavender-banner
                                 (_meta-push r k f tau)))
                        f
 		       tau))
@@ -895,8 +941,9 @@
                                       (if (_environment? new-env)
                                           ((_generate_toplevel-continuation
                                                         new-level
-                                                        (_env-down new-env))
-                                                blond-banner
+                                                        (_env-down new-env)
+							(make-initial-evaluator))
+                                                lavender-banner
                                                 (_meta-push r k f tau))
                                           (_wrong '_openloop
                                                   "not a reified environment"
@@ -905,7 +952,34 @@
 				  tau))
                        f
 		       tau))
-            (else
+             ((3)
+                (_eval (car l)
+                       r
+                       (lambda (new-level tau)
+                           (_eval (cadr l)
+                                  r
+                                  (lambda (new-env tau)
+				    (_eval (caddr l)
+					   r
+					   (lambda (new-eval tau)
+					     (if (and (_environment? new-env)
+						      (eval-func? new-eval))
+						 ((_generate_toplevel-continuation
+                                                   new-level
+                                                   (_env-down new-env)
+						   (_eval-down new-eval))
+                                                  lavender-banner
+                                                  (_meta-push r k f tau))
+						 (_wrong '_openloop
+							 "not a pair of reified environment and reified evaluator"
+							 (cons new-env new-eval))))
+					   f
+					   tau))
+                                  f
+				  tau))
+                       f
+		       tau))
+	     (else
                 (_wrong '_openloop "wrong arity" l)))))
 
 
@@ -1047,7 +1121,7 @@
 
 
 
-; Blond provides the usual conditional cond:
+; Lavender provides the usual conditional cond:
 (define _cond
     (lambda (l r k f tau)
         (if (null? l)
@@ -1081,7 +1155,8 @@
                        (lambda (level tau)
                            (k (_cont-up (_generate_toplevel-continuation
                                             level
-                                            (make-initial-environment))) tau))
+                                            (make-initial-environment)
+					    (make-initial-evaluator))) tau))
                        f
 		       tau))
             ((2)
@@ -1094,7 +1169,8 @@
                                       (if (_environment? env)
                                           (k (_cont-up
                                              (_generate_toplevel-continuation
-                                                 level (_env-down env)))
+                                              level (_env-down env)
+					      (make-initial-evaluator)))
                                              tau)
                                           (_wrong '_reify-new-continuation
                                                   "not a reified environment"
@@ -1103,7 +1179,33 @@
 				  tau))
                        f
 		       tau))
-            (else
+              ((3)
+                (_eval (car l)
+                       r
+                       (lambda (level tau)
+                           (_eval (cadr l)
+                                  r
+                                  (lambda (env tau)
+				    (_eval (caddr l)
+					   r
+					   (lambda (new-eval tau)
+					     (if (and (_environment? env)
+						      (_eval-func? new-eval))
+						 (k (_cont-up
+						     (_generate_toplevel-continuation
+						      level (_env-down env)
+						      (_eval-down new-eval)))
+						    tau)
+						 (_wrong '_reify-new-continuation
+							 "not a pair of reified environment and reified evaluator"
+							 (cons env new-eval))))
+					   f
+					   tau))
+                                  f
+				  tau))
+                       f
+		       tau))
+	      (else
                 (_wrong '_reify-new-continuation "arity mismatch" l)))))
 
 
@@ -1127,7 +1229,7 @@
 
 
 ; Ending a session ignores the current continuation and meta-continuation:
-(define _blond-exit
+(define _lavender-exit
     (lambda (l r k f tau)
         "farvel!"))
 
@@ -1175,7 +1277,7 @@
         let letrec
         rec let*
         cond
-        blond-exit
+        lavender-exit
         reify-new-environment
         reify-new-continuation
         continuation-mode
@@ -1189,7 +1291,7 @@
 (define _inFsubr
     (lambda (arity function-value)
         (list 'fsubr arity function-value)))
-(define _default-eval-f (_inFsubr 1 _default-eval))
+(define _default-eval-f (cons 'eval (_inFsubr 1 _default-eval)))
 
 (define table-common-values
   (list '()
@@ -1230,7 +1332,7 @@
         (_inFsubr 2 _let) (_inFsubr 2 _letrec)
         (_inFsubr 2 _rec) (_inFsubr 2 _let*)
         (_inFsubr 0 _cond)
-        (_inFsubr 0 _blond-exit)
+        (_inFsubr 0 _lavender-exit)
         (_inSubr 0 _reify-new-environment)
         (_inFsubr 0 _reify-new-continuation)
         (_inSubr 0 _continuation-mode)
@@ -1240,6 +1342,7 @@
 
 
 ; Miscalleneous:
+
 (define _wrong
     list)
 
@@ -1279,6 +1382,7 @@
 (define _fetch-arity cadr)
 (define _fetch-value caddr)
 
+(define _fetch-eval cdr)
 ; Basic lexical environment extension:
 (define _extend_env
   (lambda (par l env)
@@ -1287,14 +1391,15 @@
       env)))
 
 
-; ----- how Blond hangs together ----------------------------------------------
+; ----- how Lavender hangs together ----------------------------------------------
 
 ; The starting point:
-(define blond
+(define lavender
     (lambda ()
         ((_generate_toplevel-continuation initial-level
-                                          (make-initial-environment))
-             blond-banner (initial-meta-continuation initial-level))))
+                                          (make-initial-environment)
+					  (make-initial-evaluator))
+             lavender-banner (initial-meta-continuation initial-level))))
 
 ; The initial level and how to manifest a level above it:
 (define initial-level 0)
@@ -1305,36 +1410,41 @@
     (lambda ()
         (_extend_env '() '() '())))
 
+;; The generation of a default evaluator
+(define make-initial-evaluator
+  (lambda ()
+    _default-eval-f))
 
 ; Some fantasy:
-(define blond-banner		; cf. Full Metal Jacket, Stanley Kubrick (1987)
+(define lavender-banner		; cf. Full Metal Jacket, Stanley Kubrick (1987)
     "Is it John McCarthy or is it me?")
-(define blond-banner		; cf. Brazil, Terry Gyndham (1985)
+(define lavender-banner		; cf. Brazil, Terry Gyndham (1985)
     "It's okay, I don't like you either.")
-(define blond-banner		; "til tjeneste" means "at your service"
+(define lavender-banner		; "til tjeneste" means "at your service"
     "til tjeneste")		; it is an old-fashioned formula in Danish
-(define blond-banner
+(define lavender-banner
     "started up")
-(define blond-banner		; cf. 3-Lisp
+(define lavender-banner		; cf. 3-Lisp
     "[Thud.]")
-(define blond-banner
+(define lavender-banner
     "toplevel")
-(define blond-banner
-    "blond")
-(define blond-banner
+(define lavender-banner
+    "lavender")
+(define lavender-banner
     "-*-")
-(define blond-banner
-    "Blond is winning again")
-(define blond-banner		; a la Brown
+(define lavender-banner
+    "Lavender is winning again")
+(define lavender-banner		; a la Brown
     "starting-up")
-(define blond-banner
+(define lavender-banner
     "bottom-level")
 
 
 ; A self-generating initial meta-continuation:
 (define initial-meta-continuation
     (lambda (level)
-        (let ((an-initial-environment (make-initial-environment)))
+      (let ((an-initial-environment (make-initial-environment))
+	    (an-initial-evaluator (make-initial-evaluator)))
             (lambda (selector)
                 (case selector
                     ((env)
@@ -1342,9 +1452,10 @@
                     ((cont)
                         (_generate_toplevel-continuation
                             (level-above level)
-                            an-initial-environment))
+                            an-initial-environment
+			    an-initial-evaluator))
 		    ((eval)
-		     _default-eval-f)
+		     an-initial-evaluator)
                     ((meta-continuation)
                         (initial-meta-continuation (level-above level)))
                     (else
@@ -1385,7 +1496,7 @@
 
 ; Generation of a new top-level loop:
 (define _generate_toplevel-continuation
-    (lambda (my-level my-environment)
+    (lambda (my-level my-environment my-evaluator)
         (letrec ((elementary-loop
                     (lambda (iteration)
                         (lambda (val meta-continuation)
@@ -1395,7 +1506,7 @@
                                        my-environment
                                        (elementary-loop
                                             (next-iteration iteration))
-				       _default-eval-f
+				       my-evaluator
 				       meta-continuation))))))
             (elementary-loop first-iteration))))
 
@@ -1422,3 +1533,5 @@
             (flush-output-port))))
 
 ; ----- end of the file -------------------------------------------------------
+;; (common-define del (delta (e r k f) (meaning (list 'list e e) r k f)))
+;; ((delta (e r k f) (begin (f del) (meaning e r k f))))
