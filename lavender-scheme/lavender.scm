@@ -52,9 +52,9 @@
 ;;Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _eval
   (lambda (e r k f tau)
-    (display "\n eval entered \n")
-    (display (list 'eval-args e r k f))
-    (display "\n")
+    ;(display "\n eval entered \n")
+    ;(display (list 'eval-args e r k f))
+    ;(display "\n")
     (let ((f-content (_fetch-eval f)))
       (cond
        ((and (pair? e) (eq? (car e) 'lavender))
