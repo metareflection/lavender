@@ -1,5 +1,8 @@
+0-0: "bottom-level"
 0-1> (common-define del (delta (e r k f) (meaning (rpn e) r k default-eval)))
-0-1:
-0-2> ((delta (e r k f) (begin (f del) (meaning e r k f))) + 40 2)
-0-2: (42 42)
-0-3> (let ((a 3) (b 4)) 
+0-1: del
+0-2> ((delta (e r k f) (begin (f del) (meaning e r k f))) 40 2 5 9 + * -)
+0-2: -12
+0-3> (1 2 3 4 + * +)
+0-3: 15
+0-4> 
