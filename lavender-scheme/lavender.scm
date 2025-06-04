@@ -47,7 +47,7 @@
 ;;(lavender)
 ;;((delta (e r k f) (meaning e r k (lambda (x) (+ x 1)))) 4)
 
-;;some issues: nested (eval evaluator eval evaluator ...) tags, how to deal with them
+;;some issues: continuation modified causing result of one round in meaning to be passed to new eval
 
 ;;Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _eval
@@ -73,13 +73,16 @@
 	  ((fsubr)
 	   (_apply f-content (list e) r k f tau))
 	  ((delta-abstraction gamma-abstraction)
-	   (_apply f-content e r k f tau))
+	   (_apply f-content e r k (cons 'eval _default-eval-f) tau))
 	  (else (_wrong '_eval "not an evaluator" f))))))))
 
 ;; Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 ;; _default-eval is a fsubr, except it only take one arg
 (define _default-eval
   (lambda (e r k f tau)
+    (display "\n default eval entered \n")
+    (display (list 'default-eval-args e r k f))
+    (display "\n-------------------------------------------------\n")
     (let ((e (car e)))
       (cond
        ((and (pair? e) (eq? (car e) 'out-lavender))
@@ -1068,10 +1071,14 @@
 			tau))))
 
 (define _let_evlis
-    (lambda (h r k f tau)
+  (lambda (h r k f tau)
+    (display "\n let-evlis entered \n")
+    (display (list 'let-evlis-args h r k f))
+    (display "\n-------------------------------------------------\n")
         (_eval (cadr (car h))
                r
                (lambda (v tau)
+		 (display (list 'let-arg-is v "\nXXXXXXXXXXXXXXXXXXX\n"))
                    (if (null? (cdr h))
                            (k (list v) tau)
                            (_let_evlis (cdr h)
