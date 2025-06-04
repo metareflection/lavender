@@ -1,7 +1,7 @@
 0-0: "bottom-level"
 0-1> (load "rpn.lavender")
 0-1: 'ok
-0-2> (common-define del (delta (e r k f) (meaning (rpn e) r k default-eval)))
+0-2> (common-define del (delta (e r k f) (meaning (rpn e) r k (lambda (x) x)))))
 0-2: del
 0-3> ((delta (e r k f) (begin (f del) (meaning e r k f))) 40 2 5 9 + * -)
 0-3: -12

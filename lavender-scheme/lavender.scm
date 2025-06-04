@@ -52,19 +52,28 @@
 ;;Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _eval
   (lambda (e r k f tau)
-    ;(display "\n eval entered \n")
-    ;(display (list 'eval-args e r k f))
-    ;(display "\n")
+    (display "\n eval entered \n")
+    (display (list 'eval-args e r k f))
+    (display "\n-------------------------------------------------\n")
+    (display (_top-eval tau))
+    (display "\n ======== \n")
+    (display (_top-eval (_meta-pop tau)))
+    (display "\n-------------------------------------------------\n")
     (let ((f-content (_fetch-eval f)))
       (cond
-       ((and (pair? e) (eq? (car e) 'lavender))
-	(_apply (_fetch-eval _default-eval-f) (cdr e) r k f tau))
+       ((and (pair? e) (equal? (car e) 'lavender))
+	(display "why-no-escape\n")
+	(_apply _default-eval-f (list (cdr e)) r k f tau))
        (else
 	(case (_fetch-ftype f-content)
+	  ;; fsubr should be similar to reifiers, but since blond views one argument fsubr
+	  ;; as one arg, we follow same convention here
 	  ((subr lambda-abstraction environment continuation)
-	   (_apply f-content (list e) r k _default-eval-f tau))
-	  ((fsubr delta-abstraction gamma-abstraction)
+	   (_apply f-content (list e) r k (cons 'eval _default-eval-f) tau))
+	  ((fsubr)
 	   (_apply f-content (list e) r k f tau))
+	  ((delta-abstraction gamma-abstraction)
+	   (_apply f-content e r k f tau))
 	  (else (_wrong '_eval "not an evaluator" f))))))))
 
 ;; Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
@@ -84,7 +93,7 @@
                r	     
                (lambda (fo tau)
 		 (_apply fo (cdr e) r k f tau))
-               _default-eval-f
+               (cons 'eval _default-eval-f)
 	       tau))
        (else
 	(_wrong '_eval "unknown form" e))))))
@@ -120,7 +129,10 @@
 ;; maybe use default eval in definitions for evaluating current thing, but
 ;; use f later
 (define _apply
-    (lambda (fo l r k f tau)
+  (lambda (fo l r k f tau)
+    ;(display "\n apply entered\n")
+    ;(display (list 'apply-args fo l r k f))
+    ;(display "\n")
         (if (_applicable? fo)
             (case (_fetch-ftype fo)
                 ((subr)
@@ -348,6 +360,9 @@
 ; Hook for the toggle switch-continuation-mode:
 (define _apply_continuation _apply_continuation-jumpy)
 
+;; reified evaluator: ('evaluator 'eval . f)
+;; evaluator: ('eval . f)
+;; f is any applicable
 (define _apply_evaluator
   (lambda (ef l r k f tau)
      (case (length l)
@@ -1291,7 +1306,7 @@
 (define _inFsubr
     (lambda (arity function-value)
         (list 'fsubr arity function-value)))
-(define _default-eval-f (cons 'eval (_inFsubr 1 _default-eval)))
+(define _default-eval-f (_inFsubr 1 _default-eval))
 
 (define table-common-values
   (list '()
@@ -1413,7 +1428,7 @@
 ;; The generation of a default evaluator
 (define make-initial-evaluator
   (lambda ()
-    _default-eval-f))
+    (cons 'eval _default-eval-f)))
 
 ; Some fantasy:
 (define lavender-banner		; cf. Full Metal Jacket, Stanley Kubrick (1987)
@@ -1533,5 +1548,5 @@
             (flush-output-port))))
 
 ; ----- end of the file -------------------------------------------------------
-;; (common-define del (delta (e r k f) (meaning (list 'list e e) r k f)))
-;; ((delta (e r k f) (begin (f del) (meaning e r k f))))
+;; (common-define del (delta (e r k f) (meaning (list 'list e e) r k default-eval)))
+;; ((delta (e r k f) (begin (f del) (r 'aha 4299) (meaning e r k f))) + 40 2)
