@@ -226,7 +226,7 @@
     (if (not (= (length l) (_fetch-arity p)))
             (_wrong '_apply_procedure "arity mismatch" l)
             (_evlis l r (lambda (lv tau)
-                            ((_fetch-value p) lv k tau)) f tau))))
+                            ((_fetch-value p) lv k tau)) (cons 'eval _default-eval-f) tau))))
 
 
 ; A sequence of expressions is evaluated from left to right:
@@ -245,7 +245,7 @@
                                  (k (cons v lv) tau))
 			       f
                                tau))
-		   f
+		   (cons 'eval _default-eval-f)
                    tau))))
 
 
@@ -385,6 +385,7 @@
              (_wrong '_apply_evaluator "arity mismatch" l)))))
 
 ;; f and new f are guarenteed to be evaluators
+; f: (cons 'eval some-f), new-f: some applicable
 (define _set-evaluator!
   (lambda (f new-f)
     (set-cdr! f new-f)))
@@ -657,6 +658,8 @@
     (lambda (l r k f tau)
         (k (_inLambda-Abstraction (length (car l))
                                   (lambda (lv k tau)
+				    (display "\n A lambda applied \n")
+				    (display (list 'lambda-args lv k))
                                       (_eval (cadr l)
                                              (_extend_env (car l) lv r)
                                              k
@@ -1555,5 +1558,7 @@
             (flush-output-port))))
 
 ; ----- end of the file -------------------------------------------------------
+;; (common-define mylist (lambda (e1 e2) (list 'list e1 e2)))
+;; (common-define del (delta (e r k f) (meaning (mylist e e) r k default-eval)))
 ;; (common-define del (delta (e r k f) (meaning (list 'list e e) r k default-eval)))
-;; ((delta (e r k f) (begin (f del) (r 'aha 4299) (meaning e r k f))) + 40 2)
+;; ((delta (e r k f) (begin (f del) (meaning e r k f))) + 40 2)
