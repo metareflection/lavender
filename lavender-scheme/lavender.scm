@@ -52,17 +52,17 @@
 ;;Expr * Env * Cont * Eval-Func * Meta-Cont -> Val
 (define _eval
   (lambda (e r k f tau)
-    (display "\n eval entered \n")
-    (display (list 'eval-args e r k f))
-    (display "\n-------------------------------------------------\n")
-    (display (_top-eval tau))
-    (display "\n ======== \n")
-    (display (_top-eval (_meta-pop tau)))
-    (display "\n-------------------------------------------------\n")
+    ;(display "\n eval entered \n")
+    ;(display (list 'eval-args e r k f))
+    ;(display "\n-------------------------------------------------\n")
+    ;(display (_top-eval tau))
+    ;(display "\n ======== \n")
+    ;(display (_top-eval (_meta-pop tau)))
+    ;(display "\n-------------------------------------------------\n")
     (let ((f-content (_fetch-eval f)))
       (cond
        ((and (pair? e) (equal? (car e) 'lavender))
-	(display "why-no-escape\n")
+	;(display "why-no-escape\n")
 	(_apply _default-eval-f (list (cdr e)) r k f tau))
        (else
 	(case (_fetch-ftype f-content)
@@ -80,9 +80,9 @@
 ;; _default-eval is a fsubr, except it only take one arg
 (define _default-eval
   (lambda (e r k f tau)
-    (display "\n default eval entered \n")
-    (display (list 'default-eval-args e r k f))
-    (display "\n-------------------------------------------------\n")
+    ;(display "\n default eval entered \n")
+    ;(display (list 'default-eval-args e r k f))
+    ;(display "\n-------------------------------------------------\n")
     (let ((e (car e)))
       (cond
        ((and (pair? e) (eq? (car e) 'out-lavender))
@@ -658,8 +658,8 @@
     (lambda (l r k f tau)
         (k (_inLambda-Abstraction (length (car l))
                                   (lambda (lv k tau)
-				    (display "\n A lambda applied \n")
-				    (display (list 'lambda-args lv k))
+				    ;(display "\n A lambda applied \n")
+				    ;(display (list 'lambda-args lv k))
                                       (_eval (cadr l)
                                              (_extend_env (car l) lv r)
                                              k
@@ -735,7 +735,7 @@
                                       (cons (car l) table-common-identifiers))
                                 (set! table-common-values
                                       (cons a table-common-values))
-                                (k (car l) tau))))) f tau))))
+                                (k (car l) tau))))) (cons 'eval _default-eval-f) tau))))
 
 
 
@@ -1075,13 +1075,13 @@
 
 (define _let_evlis
   (lambda (h r k f tau)
-    (display "\n let-evlis entered \n")
-    (display (list 'let-evlis-args h r k f))
-    (display "\n-------------------------------------------------\n")
+    ;(display "\n let-evlis entered \n")
+    ;(display (list 'let-evlis-args h r k f))
+    ;(display "\n-------------------------------------------------\n")
         (_eval (cadr (car h))
                r
                (lambda (v tau)
-		 (display (list 'let-arg-is v "\nXXXXXXXXXXXXXXXXXXX\n"))
+		 ;(display (list 'let-arg-is v "\nXXXXXXXXXXXXXXXXXXX\n"))
                    (if (null? (cdr h))
                            (k (list v) tau)
                            (_let_evlis (cdr h)
