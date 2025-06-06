@@ -1,0 +1,119 @@
+; Different deltas preserve environment, if we just use the continuation on meaning directly.
+; e.g.
+> (blond)
+0-0: "bottom-level"
+0-1> ((delta (e r k) (begin (define count 0) (meaning e r k))))
+0-1: ()
+0-2> ((delta (e r k) (meaning e r (lambda (b) (k count)))))
+0-2: 0
+0-3>
+
+; if we wrap a lambda, it doesn't work
+> (blond)
+0-0: "bottom-level"
+0-1> ((delta (e r k) (begin (define count 0) (meaning e r (lambda (v) (k count))))))
+0-1: 0
+0-2> ((delta (e r k) (meaning e r (lambda (b) (k count)))))
+(_lookup_common "unbound identifier" count)
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; variables introduced in let bindings work, but modifying continuation makes it go wrong
+; e.g.1. When k passed directly, works as expected
+> (blond)
+0-0: "bottom-level"
+0-1> ((delta (e r k) (let ((count 0)) (meaning e r k))))
+0-1: ()
+0-2> ((delta (e r k) (meaning count r k)))
+0-2: 0
+0-3> ((delta (e r k) (meaning (+ count 3) r k)))
+0-3: 3
+0-4> ((delta (e r k) (begin (set! count 55) (meaning count r k))))
+0-4: 55
+0-5> ((delta (e r k) (meaning (+ count 33) r k)))
+0-5: 88
+0-6> ((delta (e r k) (let ((count 99)) (meaning count r k))))
+0-6: 99
+0-7> ((delta (e r k) (meaning (+ 1 count) r k)))
+0-7: 100
+0-8>
+
+; e.g.2. When wrap a lambda around k then pass to meaning, doesn't work
+> (blond)
+0-0: "bottom-level"
+0-1> ((delta (e r k) (let ((count 0)) (meaning e r k))))
+0-1: ()
+0-2> ((delta (e r k) (meaning e r k)))
+0-2: ()
+0-3> ((delta (e r k) (meaning e r (lambda (v) (k count)))))
+0-3: 0
+0-4> ((delta (e r k) (meaning e r (lambda (v) (k count)))))
+(_lookup_common "unbound identifier" count)
+> 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; changing environment also has different subtlties
+> (blond)
+0-0: "bottom-level"
+0-1> ((delta (e r k) (let ((count 0)) (meaning e r k))))
+0-1: ()
+0-2> ((delta (e r k) (meaning e (r 'counter count) k)))
+(_apply_environment "undefined variable" counter)
+> (blond)
+0-0: "bottom-level"
+0-1> (define counter 99)
+0-1: counter
+0-2> ((delta (e r k) (let ((count 0)) (meaning e r k))))
+0-2: ()
+0-3> ((delta (e r k) (meaning e (r 'counter count) k)))
+(_meaning "polluted environment" 99)
+> 
+
+
+;;;;;;;;;;;;;;;;;; Comparison and Differences with Black's Delta ;;;;;;;;;;;;;;;;;;;;;;
+; In Black, continuation application is pushy, thus applying a continuation would not
+; discard current level.
+; However, unlike Blond, definitions done inside a delta are not stored
+;;;
+; If we change the line in apply-delta from extend environment to mutating environment,
+; then delta would work in Black
+
+;e.g.1
+> (load "init.scm") ; modified init file that loads black-with-delta.scm
+New level loaded.
+0-0: start
+0-1> ((delta (e r k) (begin (define count 0) (k count))))
+New level loaded.
+0-1: 0
+0-2> ((delta (e r k) 0))
+1-0: 0
+1-1> count
+New level loaded.
+2-0: (eval-var: unbound variable: count)
+2-1> 
+
+;;;
+;e.g.2
+> (load "init.scm")
+New level loaded.
+0-0: start
+0-1> ((delta (e r k) (begin (define count 0) (k count))))
+New level loaded.
+0-1: 0
+0-2> ((delta (e r k) (k count)))
+New level loaded.
+2-0: (eval-var: unbound variable: count)
+2-1> 
+
+;;;;;
+; e.g.3
+> (load "init.scm")
+New level loaded.
+0-0: start
+0-1> ((delta (e r k) (begin (define count 0) count)))
+New level loaded.
+1-0: 0
+1-1> count
+New level loaded.
+2-0: (eval-var: unbound variable: count)
+2-1> 

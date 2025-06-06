@@ -1,0 +1,16 @@
+((delta
+  (e r k)
+  (begin
+    (define count 0)
+    (let ((old-meaning (r 'meaning)))
+      (begin
+        ((delta (e1 r1 k1)
+                (begin
+                  (r1 'meaning (lambda (e r k)
+                                (begin
+                                  (r1 'count (+ (r1 'count) 1))
+                                  ((r1 'old-meaning) e r k))))
+                  (k1 'done))))
+         (meaning e r (lambda (v) (k count)))))))
+ + 1 6
+)

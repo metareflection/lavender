@@ -1,0 +1,84 @@
+
+level 2 and above: default lavender, a scheme like language
+level 1: imp
+level 0: reverse polish
+
+0-4> (4 3 2 9 * - +)
+; (3 - (2 * 9)) + 4 = -11
+0-4: -11
+0-5> (4 3 2 ('lavender (delta (e r k f)
+     	(pol-eval := some-changes 'seq ('lavender meaning e r k pol-eval)))  7 8 9 + + ) ) * - +)
+; some-changes would make all + be treated as *
+; exp in 0-5 would be equivalent to (4 3 2 (7 8 9 * *) * - +), which is
+; (3 - (((8 * 9) * 7) * 2)) + 4 = 3 - (56*9=504) * 2 + 4 = -1001
+0-5: -1001
+
+
+
+
+;; go up to meta-meta-level to change the evaluator for metalevel to be an imperative language
+;; then write a polish calculator in the imperative language to redefine user level semantics
+0-0: Lavender
+0-1> ((delta (e0 r0 k0 f0)
+       (begin
+         ((delta (e1 r1 k1 f1)
+           (begin
+	     (load "imp.lavender")
+	     (meaning e1 r1 k1 imp-eval))))
+	 ('lavender meaning e0 r0 k0 f0))) + 1 2)
+;; at any level, under any evaluator, a list starting with 'lavender uses default semantics
+;; we need to do this to achieve the same thing as (meaning e0 r0 k0 f0) under default eval
+;; since the evaluator at level 1 has been changed to imp-eval from the earlier call to meaning
+0-1: 3
+0-2> (define re (delta (e r k f)
+       ('load "polish.imp" 'seq
+         ('lavender meaning e r k pol-eval))))   
+0-2: re
+0-3> (re + - * 9 8 2 4) ; still using default evaluator here
+0-3: 74
+;; 9 * 8 = 72, 72 - 2 = 70, 70 + 4 = 74
+0-4> (+ - * 9 8 2 4) ; changes to polish
+0-4: 74
+0-5> (+ - ('lavender openloop 'f) 2 3 5 6) 
+f-0: Lavender
+f-1> (define lam (lambda (a b) (* 2 a b)))  ;; by default, new loop uses default evaluator
+f-1: lam
+f-2> (exit lam)
+0-5: 13
+;; turns into (+ - lam 2 3 5 6) in polish notation, where lam multiplies two numbers then double the result
+;; 2 * (2 * 3) = 12, 12 - 5 = 7, 7 + 6 = 13
+0-6>
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; contents of imp.lavender:
+(define imp-eval
+  (lambda (exp env cont tau)
+  ;; just an evaluator for an imperative language written in scheme
+
+  ;; takes exp (an sexp representing a list of commands and function definitions)
+  ;; and does side effects to the environment
+  ))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; contents of polish.imp, an sexp with lots of tags:
+
+('def pol-eval (exp env cont tau) {
+  hd := scheme(car exp) 'seq
+  'if scheme(arith? hd) 'then result := eval(scheme(hd (cadr exp) (caddr exp)))
+  'else result := exp 'end 'seq
+  'return scheme(cont result tau)	
+})
+;; note that env isn't used here but we still need it to satisfy the protocol for evaluators
+
+;;;;;;;;;;;;;;;;;;
+; Aside
+; this doesn't seem to work in Blond, but
+; if we change meaning of e0 e1 to just e0 then it works
+
+((delta (e0 r0 k0)
+  (begin
+    ((delta (e1 r1 k1) (begin (print 1) (meaning e1 r1 k1))))
+    (meaning e0 r0 k0))) 3)
+
+;; need to be able to do this in Lavender to make the code above works

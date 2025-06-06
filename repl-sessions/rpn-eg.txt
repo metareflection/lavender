@@ -1,0 +1,31 @@
+> (load "lavender.scm")
+> (lavender)
+0-0: "bottom-level"
+0-1> (load "../wishful-examples/rpn.lavender")
+binop rpn-h rpn 
+0-1: "../wishful-examples/rpn.lavender"
+0-2> (common-define del (delta (e r k f) (let ((new-e (cons 'list (rpn e)))) (meaning new-e r k default-eval))))
+0-2: del
+0-3> ((delta (e r k f) (begin (f del) (meaning e r k f))) 40 2 5 9 + * -)
+0-3: (-12)
+0-4> (1 2 3 4 + * +)
+0-4: (15)
+0-5> (lavender (delta (e r k f) (begin (f rpn) (meaning e r k default-eval))) + 40 2)
+0-5: 42
+0-6> (list 1 2 3 4 + * +)
+0-6: (error)
+0-7> (list 1 2 3 4 '+ '* '+)
+0-7: (15)
+0-8> '(1 2 3 4 + * +)
+0-8: (15)
+0-9> (lavender common-define del2 (delta (e r k f) (meaning (cons 'list (rpn e)) r k default-eval)))
+0-9: del2
+0-10> (lavender (delta (e r k f) (begin (f del2) (meaning e r k default-eval))) + 40 2)
+0-10: 42
+0-11> (1 2 3 4 + * +)
+0-11: (15)
+0-12> (1 2 3 4 + *)
+0-12: (1 14)
+0-13> (lavender lavender-exit)
+"farvel!"
+>
