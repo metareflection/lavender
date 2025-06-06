@@ -1,0 +1,52 @@
+;; goal is to set to the following layout:
+;; level 0 is an imp language evalautor
+;; level 1 and above are lavender default evaluator
+;; semantics for evaluating expressions on RHS of assignments in the imp language
+;; is stored in a variable at level 2, named eval-rhs
+;; we can change whether we want symbolic or concrete evaluation by setting the variable
+;; at meta level
+
+(define boolexp-eval
+  (lambda (bexp)
+    (case (cadr bexp)
+      ((=)
+       (= (car bexp) (caddr bexp)))
+      ((>)
+       (> (car bexp) (caddr bexp)))
+      ((<)
+       (< (car bexp) (caddr bexp)))
+      ((>=)
+       (>= (car bexp) (caddr bexp)))
+      ((<=)
+       (<= (car bexp) (caddr bexp))))))
+(define eval-rhs (lambda (x) 0))
+(define imp-h
+  (lambda (stmts st)
+    (if (equal? stmts '()) st
+	(let ((stmt (car stmts)) (rst (cdr stmts)))
+	  (case stmt
+	    ((if) )
+	    ((for) )
+	    (else
+	     (if (and (= 3 (length stmt))
+		      (equal? '= (cadr stmt)))
+		 (imp-h rst (cons (cons (car stmt) (eval-rhs caddr stmt)) st))
+		 (list 'imp-error)))
+	  )))
+(define prog1-init1
+  '((a = 2)
+    (b = 10)))
+
+(define prog1-init2
+  '((a = 5)
+    (b = 10)))		 
+(define prog1
+  '((c = (a * 2))
+    (if (c = 10)
+	then 
+	(a = a * 8)
+	else
+	(a = a * 9))
+    (for (a > 10) do
+	 (b = b + 1))
+    (return b)))
