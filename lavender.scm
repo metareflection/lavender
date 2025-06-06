@@ -1440,29 +1440,9 @@
   (lambda ()
     (cons 'eval _default-eval-f)))
 
-; Some fantasy:
-(define lavender-banner		; cf. Full Metal Jacket, Stanley Kubrick (1987)
-    "Is it John McCarthy or is it me?")
-(define lavender-banner		; cf. Brazil, Terry Gyndham (1985)
-    "It's okay, I don't like you either.")
-(define lavender-banner		; "til tjeneste" means "at your service"
-    "til tjeneste")		; it is an old-fashioned formula in Danish
+
 (define lavender-banner
-    "started up")
-(define lavender-banner		; cf. 3-Lisp
-    "[Thud.]")
-(define lavender-banner
-    "toplevel")
-(define lavender-banner
-    "lavender")
-(define lavender-banner
-    "-*-")
-(define lavender-banner
-    "Lavender is winning again")
-(define lavender-banner		; a la Brown
-    "starting-up")
-(define lavender-banner
-    "bottom-level")
+    "Fish, fiddle-de-dee!")
 
 
 ; A self-generating initial meta-continuation:
