@@ -1256,7 +1256,7 @@
 ; Ending a session ignores the current continuation and meta-continuation:
 (define _lavender-exit
     (lambda (l r k f tau)
-        "farvel!"))
+        "fare wel!")) ; farewell in Middle English
 
 
 

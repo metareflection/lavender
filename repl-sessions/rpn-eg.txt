@@ -1,6 +1,6 @@
 > (load "lavender.scm")
 > (lavender)
-0-0: "bottom-level"
+0-0: Fish, fiddle-de-dee
 0-1> (load "../wishful-examples/rpn.lavender")
 binop rpn-h rpn 
 0-1: "../wishful-examples/rpn.lavender"

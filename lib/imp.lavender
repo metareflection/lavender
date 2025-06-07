@@ -19,19 +19,33 @@
        (>= (car bexp) (caddr bexp)))
       ((<=)
        (<= (car bexp) (caddr bexp))))))
-(define eval-rhs (lambda (x) 0))
+(define eval-aexp-concrete (lambda (x) 0))
+(define eval-aexp-symb (lambda (x) 0))
+(define eval-bool-concrete
+  (lambda (x) 0))
+(define eval-bool-symb
+  (lambda (bexp st g) 0))
+
+(define eval-bool eval-bool-symb)
+(define eval-aexp eval-aexp-symb)
+
+(define eval-stmt
+  (lambda (stmt st g)
+    (case (car stmt)
+      ((if)
+       (if (eval-bool (cadr stmt) st g)
+	   
+      ((while) )
+      (else
+       (if (and (= 3 (length stmt))
+		(equal? '= (cadr stmt)))
+	   (cons (cons (cons (car stmt) (eval-aexp caddr stmt)) st) g)
+	   (list 'imp-syntax-error)))
 (define imp-h
   (lambda (stmts st)
     (if (equal? stmts '()) st
 	(let ((stmt (car stmts)) (rst (cdr stmts)))
-	  (case stmt
-	    ((if) )
-	    ((for) )
-	    (else
-	     (if (and (= 3 (length stmt))
-		      (equal? '= (cadr stmt)))
-		 (imp-h rst (cons (cons (car stmt) (eval-rhs caddr stmt)) st))
-		 (list 'imp-error)))
+	 
 	  )))
 (define prog1-init1
   '((a = 2)
