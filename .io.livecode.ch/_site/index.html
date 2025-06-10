@@ -1,0 +1,57 @@
+{% extends "base_livecode.html" %}
+
+{% block title %}The reflective tower Lavender{% endblock %}
+
+{% block content %}
+
+<div class="live" id="simple" data-lib="">
+(lavender)
+((delta (e r k f) (meaning e r k (lambda (x) (list x x)))) + 40 2)
+((delta (e r k f) (meaning e r k default-eval)) + 40 2)
+(define a 42)
+((delta (e r k f) (meaning (car e) r k r)) 'a)
+((delta (e r k f) (meaning e r k k)) + 40 2)
+</div>
+
+<div class="live" id="simple" data-lib="">
+(lavender)
+(load "./lib/rpn.lavender")
+(common-define del (delta (e r k f) (let ((new-e (cons 'list (rpn e)))) (meaning new-e r k default-eval))))
+((delta (e r k f) (begin (f del) (meaning e r k f))) 40 2 5 9 + * -)
+(1 2 3 4 + * +)
+(lavender (delta (e r k f) (begin (f rpn) (meaning e r k default-eval))) + 40 2)
+(list 1 2 3 4 + * +)
+(list 1 2 3 4 '+ '* '+)
+'(1 2 3 4 + * +)
+(lavender common-define del2 (delta (e r k f) (meaning (cons 'list (rpn e)) r k default-eval)))
+(lavender (delta (e r k f) (begin (f del2) (meaning e r k default-eval))) + 40 2)
+(1 2 3 4 + * +)
+(1 2 3 4 + *)
+</div>
+
+<h2>Playground</h2>
+
+<div class="live" id="play" data-lib="">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</div>
+
+<p>Happy Happy Joy Joy!</p>
+
+{% endblock %}
