@@ -13,7 +13,7 @@
 ((delta (e r k f) (meaning e r k k)) + 40 2)
 </div>
 
-<div class="live" id="simple" data-lib="">
+<div class="live" id="rpn" data-lib="">
 (lavender)
 (load "./lib/rpn.lavender")
 (common-define del (delta (e r k f) (let ((new-e (cons 'list (rpn e)))) (meaning new-e r k default-eval))))
