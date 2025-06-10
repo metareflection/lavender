@@ -23,5 +23,5 @@
 	       (list 'rpn-error "not enough arguments" stk)))
 	  (else (if (number? (car lst))
 		    (rpn-h (cdr lst) (cons (car lst) stk))
-		    (list 'error)))))))
+		    (list 'rpn-error)))))))
 (common-define rpn (lambda (lst) (rpn-h lst '())))

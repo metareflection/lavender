@@ -25,19 +25,23 @@
 
 (define eval-bool-conc
   (lambda (bexp st g)
-    (case (cadr bexp)
-      ((=)
-       (= (car bexp) (caddr bexp)))
-      ((>)
-       (> (car bexp) (caddr bexp)))
-      ((<)
-       (< (car bexp) (caddr bexp)))
-      ((>=)
-       (>= (car bexp) (caddr bexp)))
-      ((<=)
-       (<= (car bexp) (caddr bexp))))))
+    (let ((boolop (cadr bexp))
+	  (e1 (car bexp))
+	  (e2 (caddr bexp)))
+      (case boolop
+	((=)
+	 (= (eval-aexp e1 st) (eval-aexp e2 st)))
+	((>)
+	 (> (eval-aexp e1 st) (eval-aexp e2 st)))
+	((<)
+	 (< (eval-aexp e1 st) (eval-aexp e2 st)))
+	((>=)
+	 (>= (eval-aexp e1 st) (eval-aexp e2 st)))
+	((<=)
+	 (<= (eval-aexp e1 st) (eval-aexp e2 st)))))))
 (define eval-bool-symb
-  (lambda (bexp st g) 0))
+  (lambda (bexp st g)
+    (list 'and g (to-prefix bexp))))
 
 (define eval-bool eval-bool-symb)
 (define eval-aexp
