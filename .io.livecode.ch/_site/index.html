@@ -11,6 +11,7 @@
 (define a 42)
 ((delta (e r k f) (meaning (car e) r k r)) 'a)
 ((delta (e r k f) (meaning e r k k)) + 40 2)
+(lavender-exit)
 </div>
 
 <div class="live" id="rpn" data-lib="">
@@ -27,6 +28,7 @@
 (lavender (delta (e r k f) (begin (f del2) (meaning e r k default-eval))) + 40 2)
 (1 2 3 4 + * +)
 (1 2 3 4 + *)
+(lavender-exit)
 </div>
 
 <h2>Playground</h2>
