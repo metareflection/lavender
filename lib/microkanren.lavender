@@ -1,0 +1,126 @@
+;;;;;;;;;;;;;; Core ;;;;;;;;;;;;;;;;;;;;;;;
+(define var
+  (lambda (c) (list "var" c)))
+(define var?
+  (lambda (x) (and (list? x) (= (car x) "var"))))
+(define var=?
+  (lambda (x1 x2) (= (cadr x1) (cadr x2))))
+
+(define walk
+  (lambda (expr sub)
+    (let ((val-of-var (and (var? expr) (find_opt expr sub)))) ;(lambda (v) (var=? expr v)) sub
+      (if val-of-var (walk val-of-var sub) expr))))
+
+(define occurs ; github code doesn't contain occurs check
+  (lambda (var exp sub)
+    (cond
+     ((var? exp) (var=? var exp))
+     ((pair? exp)
+      (if (occurs var (walk (car exp) sub) sub)
+	  #t
+	  (occurs var (cdr exp) sub)))
+     (else #f))))
+
+(define sub-update
+  (lambda (var exp sub)
+    (if (occurs var exp sub)
+	sub
+	(cons (cons var exp) sub))))
+
+(define mzero '())
+(define unit (lambda (s/c) (cons s/c mzero)))
+
+
+(define unify
+  (lambda (exp1 exp2 sub)
+    (let ((exp1 (walk exp1 sub)) (exp2 (walk exp2 sub)))
+      (cond
+       ((and (var? exp1) (var? exp2) (var=? exp1 exp2)) sub)
+       ((var? exp1) (sub-update exp1 exp2 sub))
+       ((var? exp2) (sub-update exp2 exp1 sub))
+       ((and (pair? exp1) (pair? exp2))
+	(let ((sub' (unify (car exp1) (car exp2) sub)))
+          (and sub' (unify (cdr exp1) (cdr exp2) sub)))))
+       (else (and (eqv? exp1 exp2) sub)))))
+
+(define call/fresh
+  (lambda (f)
+    (lambda (s/c)
+      (let ((c (cdr s/c)))
+	((f (var c)) (cons (car s/c) (+ c 1)))))))
+
+
+
+
+(define stream-app
+  (lambda ($1 $2)
+    (cond
+     ((null? $1) $2)
+     ((procedure? $1) (lambda () (stream-app $2 ($1))))
+     (else (cons (car $1) (stream-app (cdr $1) $2))))))
+
+(define bind
+  (lambda ($ g)
+    (cond
+     ((null? $) mzero)
+     ((procedure? $) (lambda () (bind ($) g)))
+     (else (stream-app (g (car $)) (bind (cdr $) g))))))
+
+(define ==
+  (lambda (exp1 exp2)
+    (lambda (s/c)
+      (let ((sub (unify exp1 exp2 (car s/c))))
+	(if sub
+	    (unit (cons sub (cdr s/c)))
+	    mzero)))))
+
+(define disj
+  (lambda (g1 g2) (lambda (s/c) (stream-app (g1 s/c) (g2 s/c)))))
+(define conj
+  (lambda (g1 g2) (lambda (s/c) (bind (g1 s/c) g2))))
+;;;;; User Interface ;;;;;;;;;;;;;;;;;;;;;;;;
+(define empty-state (cons () 0))
+
+(define call/goal
+  (lambda (g) (g empty-state)))
+
+(define pull
+  (lambda ($)
+    (if (procedure? $) (pull ($)) $)))
+
+(define take-all
+ (lambda ($)
+   (let (($ (pull $)))
+     (if (null? $) '() (cons (car $) (take-all (cdr $)))))))
+
+(define take
+  (lambda (n $)
+    (if (zero? n) '()
+	(let (($ (pull $)))
+	  (if (null? $) '() (cons (car $) (take (- n 1) (cdr $))))))))
+
+;;;;;;;;;;;;;;;;;;
+
+(define a-and-b
+  (conj 
+   (call/fresh (lambda (a) (== a 7)))
+   (call/fresh 
+    (lambda (b) 
+      (disj
+       (== b 5)
+       (== b 6))))))
+;(take 5 a-and-b)
+#|
+(common-define rel_eval
+  (efun (exp env cont tau)
+    (cond
+     ((var? exp) (cont exp tau))
+     ((and (pair? exp) (= (car exp) 'define-relation))
+      (if #t
+	  (let ((exp' (cons 'meta (cons 'define (cdr exp)))))
+	    (eval exp' env cont rel_eval tau))
+	  (cont (list 'wrong) tau)))
+     ((pair? exp)
+      (let ((val (eval exp env cont default_eval tau))) (take 5 val)))
+     (else (cont () tau)))))
+|#
