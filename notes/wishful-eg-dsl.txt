@@ -1,10 +1,13 @@
 0-0: Fish, fiddle-de-dee
 0-1> (load "imp.lavender")
-eval-stmt eval-rhs list-assign
+eval-stmt eval-rhs eval-bool list-assign
 0-1: "imp.lavender"
 0-2> (load "microkanren.lavender")
 run
 0-2: "microkanren.lavender"
+; applicavle (a lambda more specifially): (lambda (x) x)
+; evaluator: (cons 'eval (lambda (x) x))
+; reified evaluator: (cons 'evaluator (cons 'eval (lambda (x) x)))
 0-3> ((delta (e r k f) (begin (f eval-stmt) (meaning e r k f))) show-state)
 0-3: ()
 0-4> (a = (40 + 2))
@@ -19,8 +22,12 @@ run
 0-8: ((c 24) (b 24) (a 42))
 0-9> (lavender (delta (e r k f) (begin (set! eval-bool (list-assign run)) (meaning e r k f))) show-state)
 0-9: ((c 24) (b 24) (a 42))
-0-10> (if ((e f g) := (conj (= e 10) (= f e) (= g 42))) then (h = f) else (h = g))
+0-10> (if ((e f g) := (conj (== e 10) (== f e) (== g 42))) then (h = f) else (h = a))
 0-10: ()
 0-11> (show-state)
 ((h 10) (g 42) (f 10) (e 10) (c 24) (b 24) (a 42))
-0-12>
+0-12> (if ((e f g) := (conj (== a e) (== e 10 )) then (h = f) else (h = a))
+
+; defining amb
+; nested run
+; mixing through up and down tower

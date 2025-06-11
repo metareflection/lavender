@@ -1,30 +1,28 @@
-;; goal is to set to the following layout:
-;; level 0 is an imp language evalautor
-;; level 1 and above are lavender default evaluator
-;; semantics for evaluating expressions on RHS of assignments in the imp language
-;; is stored in a variable at level 2, named eval-rhs
-;; we can change whether we want symbolic or concrete evaluation by setting the variable
-;; at meta level
-
-
-(define eval-aexp-binop-symb
-  (lambda (op e1 e2 st)
-    (case op
-      ((+) (list '+ (eval-aexp e1 st) (eval-aexp e2 st)))
-      ((-) (list '- (eval-aexp e1 st) (eval-aexp e2 st)))
-      ((*) (list '* (eval-aexp e1 st) (eval-aexp e2 st)))
-      ((/) (list '/ (eval-aexp e1 st) (eval-aexp e2 st))))))
-(define eval-aexp-binop-conc
+(define eval-aexp-binop
   (lambda (op e1 e2 st)
     (case op
       ((+) (+ (eval-aexp e1 st) (eval-aexp e2 st)))
       ((-) (- (eval-aexp e1 st) (eval-aexp e2 st)))
       ((*) (* (eval-aexp e1 st) (eval-aexp e2 st)))
-      ((/) (/ (eval-aexp e1 st) (eval-aexp e2 st))))))
-(define eval-aexp-binop eval-aexp-binop-conc)
+      ((/) (/ (eval-aexp e1 st) (eval-aexp e2 st)))
+      (else '(eval-aexp-binop-error)))))
+(define lookup
+  (lambda (st name)
+    (cond
+     ((null? st) '())
+     ((equal? name (caar st)) (cdar st))
+     (else (lookup (cdr st) name)))))
 
-(define eval-bool-conc
-  (lambda (bexp st g)
+(define eval-aexp
+  (lambda (aexp st)
+    (cond ((number? aexp) aexp)
+	  ((symbol? aexp) (lookup st aexp))
+	  ((and (pair? aexp) (= 3 (length aexp)))
+	   (eval-aexp-binop (cadr aexp) (car aexp) (caddr aexp) st)))))
+	     
+
+(define eval-bool
+  (lambda (bexp st)
     (let ((boolop (cadr bexp))
 	  (e1 (car bexp))
 	  (e2 (caddr bexp)))
@@ -39,67 +37,47 @@
 	 (>= (eval-aexp e1 st) (eval-aexp e2 st)))
 	((<=)
 	 (<= (eval-aexp e1 st) (eval-aexp e2 st)))))))
-(define eval-bool-symb
-  (lambda (bexp st g)
-    (list 'and g (to-prefix bexp))))
-
-(define eval-bool eval-bool-symb)
-(define eval-aexp
-  (lambda (aexp st)
-    (cond aexp
-	  ((number? aexp) aexp)
-	  ((identifier? aexp) (lookup st aexp))
-	  ((and (pair? aexp) (= 3 (length aexp)))
-	   (eval-aexp-binop (cadr aexp) (car aexp) (caddr aexp) st)))))
-	     
 
 ; statement -> state -> guard -> (state * guard)
 (define eval-stmt
-  (lambda (stmt st g)
-    (case (car stmt)
-      ((if)
-       (let ((then-stmt (cadddr stmt))
-	     (else-stmt (cadddr (cddr stmt)))
-	     (bool-ans (eval-bool (cadr stmt) st g)))
-	 (let ((bool-ans (car bool-ans))
-	       (g (cdr bool-ans))) ; new guard
-	   (if bool-ans
-	       (eval-stmt then-stmt st g)
-	       (eval-stmt else-stmt st g)))))
-      ((while)
-       (let ((loop-body (cdddr stmt))
-	     (bool-ans (eval-bool (cadr stmt) st g)))
-	 (let ((bool-ans (car bool-ans))
-	       (g (cdr bool-ans))) ; new guard
-	 (if bool-ans
-	     (eval-stmt-lst loop-body st g)
-	     (cons st g)))))
-      (else
-       (if (and (= 3 (length stmt))
-		(equal? '= (cadr stmt)))
-	   (cons (cons (cons (car stmt) (eval-aexp caddr stmt)) st) g)
-	   (list 'imp-syntax-error)))
+  (lambda (stmt st)
+    (if (and (pair? st) (equal? (car st) 'imp-syntax-error)) st
+	(case (car stmt)
+	   ((if)
+	    (let ((then-stmts (caddr (cdr stmt) ))
+		  (else-stmts (caddr (cdddr stmt)))
+		  (bool-ans (eval-bool (cadr stmt) st)))	       
+	      (if bool-ans
+		  (eval-stmt-lst then-stmts st)
+		  (eval-stmt-lst else-stmts st))))
+	   ((while)
+	    (let ((loop-body (car (cdddr stmt)))
+		  (bool-ans (eval-bool (cadr stmt) st)))
+	      (if bool-ans
+		  (eval-stmt stmt (eval-stmt-lst loop-body st))
+		  st)))
+	   (else
+	    (if (and (= 3 (length stmt))
+		     (equal? '= (cadr stmt)))
+		(cons (cons (car stmt) (eval-aexp (caddr stmt) st)) st)
+		(cons 'imp-syntax-error stmt)))))))
 (define eval-stmt-lst
-  (lambda (stmts st g)
-    (if (equal? stmts '())
-	(cons st g)
+  (lambda (stmts st)
+    (if (null? stmts)
+	st
 	(let ((stmt (car stmts)) (rst (cdr stmts)))
-	  (let (stmt-ans (eval-stmt stmt st g))
-	    (eval-stmt-lst rst (car stmt-ans) (cdr stmt-ans)))))))
-(define prog1-init1
-  '((a = 2)
-    (b = 10)))
+	  (eval-stmt-lst rst (eval-stmt stmt st))))))
 
-(define prog1-init2
-  '((a = 5)
-    (b = 10)))		 
 (define prog1
-  '((c = (a * 2))
+  '((a = 2)
+    (b = 10)
+    (c = (a * 2))
     (if (c = 10)
 	then 
-	(a = a * 8)
+	((a = (a * 8)))
 	else
-	(a = a * 9))
+	((a = (a * 9))))
     (while (a > 10) do
-	 (b = b + 1))
-    (return b)))
+	   ((b = (b + 1))
+	    (a = (a - 1))))
+    ))
